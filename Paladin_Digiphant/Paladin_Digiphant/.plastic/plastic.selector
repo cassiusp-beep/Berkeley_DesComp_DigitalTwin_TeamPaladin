@@ -1,4 +1,0 @@
-repository "Paladin_Digiphant/Paladin_Digiphant@1376000893740@cloud"
-  path "/"
-    br "/main"
-    co "/main"
