@@ -38,6 +38,14 @@ namespace DigiPhant
         [Header("Tuning aids")]
         public bool showSignals = true;
 
+        [Header("Guided recording (no clicker needed)")]
+        [Tooltip("Seconds to get into each pose before recording starts.")]
+        public float getReadySeconds = 5;
+        [Tooltip("Seconds each pose is held and recorded.")]
+        public float holdSeconds = 6;
+        [Tooltip("Add a sixth take: the trunk performer squats with the right hand low.")]
+        public bool includeSquatTake = true;
+
         public string CurrentPoseAction { get; private set; } = "None";
 
         DigiPhantController controller;
@@ -50,6 +58,12 @@ namespace DigiPhant
         float savedForwardSensitivity, savedSteeringSensitivity;
         StreamWriter log;
 
+        enum GuideStage { Off, Calibrating, Ready, Hold, Done, Failed }
+        GuideStage guide = GuideStage.Off;
+        int guideTake;
+        float guideStageStart;
+        string guideMessage = "";
+
         void OnEnable()
         {
             controller = GetComponent<DigiPhantController>();
@@ -57,7 +71,7 @@ namespace DigiPhant
             if (actionPivot) { pivotBasePosition = actionPivot.localPosition; pivotBaseRotation = actionPivot.localRotation; }
         }
 
-        void OnDisable() { UnlockMovement(); StopLog(); }
+        void OnDisable() { UnlockMovement(); StopLog(); guide = GuideStage.Off; }
 
         float Read(int performer, Movement movement, float now) =>
             controller.TryReadMovement(performer, movement, now, out float v) ? v : float.NaN;
@@ -77,6 +91,7 @@ namespace DigiPhant
             ApplyTurn(t, turning);
             ApplyBody(t, jumping);
             if (log != null) WriteLog(now);
+            TickGuide(now);
         }
 
         void DetectPoses(float now, float t)
@@ -157,11 +172,12 @@ namespace DigiPhant
         }
 
         // CSV of every calibrated signal, for choosing thresholds and for the project's generated dataset.
-        void StartLog()
+        void StartLog(string label = null)
         {
             string dir = Path.Combine(Application.dataPath, "..", "Recordings");
             Directory.CreateDirectory(dir);
-            string path = Path.Combine(dir, "signals_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv");
+            string name = "signals_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + (label != null ? "_" + label : "");
+            string path = Path.Combine(dir, name + ".csv");
             log = new StreamWriter(path);
             var header = new StringBuilder("time,action,speed,x,z,heading");
             for (int p = 1; p <= controller.performerCount; p++)
@@ -192,15 +208,166 @@ namespace DigiPhant
             log.WriteLine(line);
         }
 
+        // Guided recording: on-screen instructions and countdowns run the whole tuning session,
+        // so nobody has to stay at the laptop. Files are named by pose (signals_<time>_<pose>.csv).
+        (string label, string title, string instruction)[] GuideTakes()
+        {
+            string d = "P" + driver, n = "P" + navigator, t = "P" + trunkPerformer;
+            var takes = new System.Collections.Generic.List<(string, string, string)>
+            {
+                ("neutral", "NEUTRAL", "Everyone: hold your neutral pose."),
+                ("tpose", "T-POSE", n + ": arms straight out to the sides.\nEveryone else: neutral."),
+                ("overhead", "ARMS OVERHEAD", n + ": both arms straight up (lift through the front).\nEveryone else: neutral."),
+                ("knee", "KNEE LIFT", d + ": right knee up, thigh level, hold it.\nEveryone else: neutral."),
+                ("other", "OTHER MOVES", d + ": raise your left hand like walking.\n" + n + ": lean left and right, then raise one arm.\n" + t + ": neutral."),
+            };
+            if (includeSquatTake) takes.Add(("squat", "SQUAT", t + ": squat with your right hand low.\nEveryone else: neutral."));
+            return takes.ToArray();
+        }
+
+        // The performer not used as driver or navigator (P3 in the three-person setup).
+        int trunkPerformer
+        {
+            get
+            {
+                for (int p = 1; p <= 4; p++) if (p != driver && p != navigator) return p;
+                return 3;
+            }
+        }
+
+        void StartGuide(float now)
+        {
+            StopLog();
+            guideTake = 0;
+            guideStageStart = now;
+            if (controller.inputMode != InputMode.Camera)
+            { guide = GuideStage.Failed; guideMessage = "Click Camera first, then press Guided recording again."; return; }
+            controller.BeginCalibrationCountdown(now);
+            guide = GuideStage.Calibrating;
+        }
+
+        void StopGuide() { StopLog(); guide = GuideStage.Off; }
+
+        void TickGuide(float now)
+        {
+            if (guide == GuideStage.Off) return;
+            float elapsed = now - guideStageStart;
+            var takes = GuideTakes();
+            switch (guide)
+            {
+                case GuideStage.Calibrating:
+                    if (controller.CalibrationPending) return;
+                    if (!controller.IsCalibrated)
+                    {
+                        guide = GuideStage.Failed;
+                        guideMessage = "Calibration failed: " + controller.Status + ".\nEveryone must be fully visible inside their own zone.";
+                        return;
+                    }
+                    guide = GuideStage.Ready; guideStageStart = now;
+                    break;
+                case GuideStage.Ready:
+                    if (!controller.IsCalibrated) { Fail("Calibration was reset. Press Guided recording to start again."); return; }
+                    if (elapsed < getReadySeconds) return;
+                    StartLog(takes[guideTake].label);
+                    guide = GuideStage.Hold; guideStageStart = now;
+                    break;
+                case GuideStage.Hold:
+                    if (elapsed < holdSeconds) return;
+                    StopLog();
+                    guideTake++;
+                    guide = guideTake < takes.Length ? GuideStage.Ready : GuideStage.Done;
+                    guideStageStart = now;
+                    break;
+                case GuideStage.Done:
+                    if (elapsed > 15) guide = GuideStage.Off;
+                    break;
+            }
+        }
+
+        void Fail(string message) { StopLog(); guide = GuideStage.Failed; guideMessage = message; guideStageStart = Time.realtimeSinceStartup; }
+
+        void DrawGuide(float now)
+        {
+            if (guide == GuideStage.Off) return;
+            var takes = GuideTakes();
+            float elapsed = now - guideStageStart;
+            string step = "", title = "", detail = "", count = "";
+            Color accent = Color.white;
+            switch (guide)
+            {
+                case GuideStage.Calibrating:
+                    step = "STEP 1: CALIBRATE";
+                    title = "STAND IN YOUR ZONE";
+                    detail = "P" + driver + " and P" + trunkPerformer + ": one hand at your waist.   P" + navigator + ": arms down.\nHold still.";
+                    count = Mathf.CeilToInt(Mathf.Max(0, 10 - elapsed)).ToString();
+                    accent = new Color(1f, .75f, .2f);
+                    break;
+                case GuideStage.Ready:
+                case GuideStage.Hold:
+                    var take = takes[guideTake];
+                    bool hold = guide == GuideStage.Hold;
+                    step = $"RECORDING {guideTake + 1} OF {takes.Length}";
+                    title = take.title;
+                    detail = take.instruction;
+                    float left = (hold ? holdSeconds : getReadySeconds) - elapsed;
+                    count = (hold ? "HOLD  " : "GET READY  ") + Mathf.CeilToInt(Mathf.Max(0, left));
+                    accent = hold ? new Color(.3f, 1f, .4f) : new Color(1f, .75f, .2f);
+                    break;
+                case GuideStage.Done:
+                    title = "ALL DONE";
+                    detail = $"{takes.Length} recordings saved in the Recordings folder.\nPress Stop and tell Claude \"done\".";
+                    accent = new Color(.3f, 1f, .4f);
+                    break;
+                case GuideStage.Failed:
+                    title = "STOPPED";
+                    detail = guideMessage;
+                    accent = new Color(1f, .4f, .35f);
+                    break;
+            }
+
+            float w = Screen.width * .7f, h = Screen.height * .62f;
+            var box = new Rect((Screen.width - w) / 2, (Screen.height - h) / 2, w, h);
+            var previous = GUI.color;
+            GUI.color = new Color(0, 0, 0, .82f);
+            GUI.DrawTexture(box, Texture2D.whiteTexture);
+            GUI.color = previous;
+
+            int unit = Mathf.Max(12, Screen.height / 28);
+            GUIStyle Style(int size, Color color, FontStyle font = FontStyle.Bold) => new GUIStyle(GUI.skin.label)
+            { fontSize = size, alignment = TextAnchor.MiddleCenter, wordWrap = true, fontStyle = font, normal = { textColor = color } };
+
+            float y = box.y + unit;
+            GUI.Label(new Rect(box.x, y, w, unit * 1.4f), step, Style(unit, new Color(.8f, .8f, .8f))); y += unit * 1.6f;
+            GUI.Label(new Rect(box.x, y, w, unit * 3f), title, Style(unit * 2, accent)); y += unit * 3.2f;
+            GUI.Label(new Rect(box.x + unit, y, w - unit * 2, unit * 4.5f), detail, Style(Mathf.RoundToInt(unit * 1.1f), Color.white, FontStyle.Normal)); y += unit * 4.8f;
+            if (count.Length > 0) GUI.Label(new Rect(box.x, y, w, unit * 3.4f), count, Style(Mathf.RoundToInt(unit * 2.6f), accent));
+            if (guide == GuideStage.Ready || guide == GuideStage.Hold || guide == GuideStage.Calibrating)
+            {
+                if (GUI.Button(new Rect(box.xMax - 110, box.y + 10, 100, 24), "Cancel")) { controller.CancelCalibrationCountdown(); StopGuide(); }
+            }
+            else if (GUI.Button(new Rect(box.xMax - 110, box.y + 10, 100, 24), "Close")) guide = GuideStage.Off;
+        }
+
         // Live readout (the button uses IMGUI, so it works with either Unity input system) of each performer's calibrated values. Strike a pose, read the numbers, set thresholds.
         void OnGUI()
         {
-            if (!showSignals || controller == null) return;
-            float now = Time.realtimeSinceStartup, w = 300, x = Screen.width - w - 10, y = 10;
+            if (controller == null) return;
+            GUI.depth = -10; // above the starter's panels, so the guide is never hidden
+            if (showSignals) DrawSignals();
+            DrawGuide(Time.realtimeSinceStartup); // last, so it sits on top of the readout
+        }
+
+        void DrawSignals()
+        {
+            float now = Time.realtimeSinceStartup, w = 360, x = Screen.width - w - 10, y = 10;
             GUI.Box(new Rect(x - 6, y - 4, w + 12, 26 + controller.performerCount * 112), GUIContent.none);
-            GUI.Label(new Rect(x, y, w - 110, 20), $"<b>Pose action:</b> {CurrentPoseAction}", Rich());
+            GUI.Label(new Rect(x, y, w - 220, 20), $"<b>Pose action:</b> {CurrentPoseAction}", Rich());
+            bool guiding = guide != GuideStage.Off;
+            GUI.enabled = !guiding;
+            if (GUI.Button(new Rect(x + w - 215, y, 105, 20), "Guided recording")) StartGuide(now);
             if (GUI.Button(new Rect(x + w - 105, y, 105, 20), log != null ? "Stop signal log" : "Log signals"))
             { if (log == null) StartLog(); else StopLog(); }
+            GUI.enabled = true;
             y += 22;
             for (int p = 1; p <= controller.performerCount; p++)
             {

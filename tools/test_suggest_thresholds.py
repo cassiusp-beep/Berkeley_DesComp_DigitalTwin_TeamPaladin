@@ -17,6 +17,24 @@ POSES = {
     'knee': dict(knee=.95, left=0, right=0, spread=0),
     'other': dict(knee=.1, left=.3, right=.2, spread=.3),
 }
+SQUAT_FEET = .6  # P3's foot lifts during the squat take; 0 in every other take
+
+
+def write_named(folder, pose, stamp, seed=0):
+    """A take saved the way Guided recording names it: signals_<date>_<time>_<pose>.csv."""
+    path = write_take(folder, pose if pose in POSES else 'neutral', seed=seed)
+    named = os.path.join(folder, f'signals_20261004_{stamp}_{pose}.csv')
+    os.replace(path, named)
+    if pose == 'squat':
+        with open(named, newline='') as f:
+            rows = list(csv.reader(f))
+        head = rows[0]
+        for r in rows[1:]:
+            for col in ('P3_LeftFootLift', 'P3_RightFootLift'):
+                r[head.index(col)] = f'{SQUAT_FEET + random.Random(len(r)).gauss(0, .03):.3f}'
+        with open(named, 'w', newline='') as f:
+            csv.writer(f).writerows(rows)
+    return named
 
 
 def write_take(folder, pose, n=60, noise=.05, seed=0):
@@ -85,6 +103,22 @@ class SuggestThresholdsTest(unittest.TestCase):
         self.assertIsNone(suggested(out, 'kneeLiftThreshold'))
         self.assertIsNone(suggested(out, 'rearHandOn'))
         self.assertIsNotNone(suggested(out, 'tPoseSpreadMin'))
+
+    def test_dir_reads_guided_recording_files_by_name(self):
+        folder = tempfile.mkdtemp()
+        for i, pose in enumerate(['neutral', 'tpose', 'overhead', 'knee', 'other', 'squat']):
+            write_named(folder, pose, f'15{i:02d}00', seed=i)
+        open(os.path.join(folder, 'signals_20261004_150500.csv'), 'w').write('time\n')  # unlabelled: ignored
+        out = run(['--dir', folder])
+        self.assertIn('Read 6 files', out)
+        self.assertNotIn('OVERLAP', out)
+        self.assertTrue(.3 < suggested(out, 'tPoseSpreadMin') < 1.0)
+        squat = [l for l in out.splitlines() if l.strip().startswith('squatOn')][0]
+        self.assertTrue(.05 < float(squat.split()[2]) < SQUAT_FEET)
+
+    def test_empty_dir_is_an_error(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            run(['--dir', tempfile.mkdtemp()])
 
     def test_bad_label_is_rejected(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):

@@ -87,9 +87,15 @@ The playbook's 0.7, 0.6 and 0.5 mean "keep this much of the old value", so a big
 
 ## 5. Record training takes
 
-Use the **Log signals** button at the top of that panel. Record one take per row below, about 5 seconds each, **holding the pose the whole time**. Click **Log signals** to start and **Stop signal log** to finish. Each take saves a new file in `Paladin_Digiphant/Paladin_Digiphant/Recordings/`.
+**No clicker needed:** press **▶ Play**, click **3**, **Full body** and **Camera**, then click **Guided recording** in the top-right box. Everyone goes to their zone. A big panel in the middle of the Game view runs the session:
 
-As you go, write down which file is which pose. The file names only contain the time.
+1. **Calibrate:** "Stand in your zone", with a 10-second countdown.
+2. **Each take:** the pose name and who does what, then **GET READY 5…** (orange), then **HOLD 6…** (green) while it records.
+3. **ALL DONE** when every take is saved.
+
+Each take is saved as `Recordings/signals_<time>_<pose>.csv`, so nobody has to remember the order. **Cancel** stops the session at any point. If calibration fails, the panel says why; fix it and press **Guided recording** again. You can change the countdown lengths (**Get Ready Seconds**, **Hold Seconds**) and the squat take in **Digi Phant Pose Actions**.
+
+The takes, in order:
 
 | Take | Who does what | Everyone else |
 |---|---|---|
@@ -98,21 +104,19 @@ As you go, write down which file is which pose. The file names only contain the 
 | `overhead` | P2: both arms straight up, hands close. **Raise them through the front, not out to the sides** | Neutral |
 | `knee` | P1: right knee up, thigh level, held | Neutral |
 | `other` | Things that must *not* trigger: P1 raises their left hand to walk; P2 leans both ways and swings their arms a bit; P2 raises one arm only | Neutral or normal play |
+| `squat` | P3: squat with the right hand low, held (for the trunk actions, coming next) | Neutral |
 
-Record 2–3 takes of each pose if you can, ideally with each of us trying the P2 poses. More takes make the thresholds work for more people.
+Run **Guided recording** 2–3 times if you can, ideally swapping who plays P2. More takes make the thresholds work for more people. (The manual **Log signals** button still works too; its files only have the time in the name.)
 
 ## 6. Get the thresholds
 
 From the repo folder, run:
 
 ```sh
-python3 tools/suggest_thresholds.py \
-  neutral=Paladin_Digiphant/Paladin_Digiphant/Recordings/signals_XXXX.csv \
-  tpose=Paladin_Digiphant/Paladin_Digiphant/Recordings/signals_XXXX.csv \
-  overhead=... knee=... other=...
+python3 tools/suggest_thresholds.py --dir Paladin_Digiphant/Paladin_Digiphant/Recordings
 ```
 
-Repeat a label (`tpose=a.csv tpose=b.csv`) to combine takes. It prints a value for each field:
+It reads every guided take in the folder, by pose name. For manual **Log signals** files, label them yourself: `neutral=signals_A.csv tpose=signals_B.csv …`. It prints a value for each field:
 
 ```
   kneeLiftThreshold    0.51   margin  0.79   P1 RightFootLift: knee lift vs everything else
