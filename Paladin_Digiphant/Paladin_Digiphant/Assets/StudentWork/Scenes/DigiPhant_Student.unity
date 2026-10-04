@@ -479,6 +479,38 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 179469036}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &186644801
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 186644802}
+  m_Layer: 0
+  m_Name: Action Pivot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &186644802
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 186644801}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1659885049}
+  m_Father: {fileID: 2103336723}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &211509060
 GameObject:
   m_ObjectHideFlags: 0
@@ -1064,7 +1096,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 2103336723}
+    m_TransformParent: {fileID: 186644802}
     m_Modifications:
     - target: {fileID: 273214145255640687, guid: b0299d541f894674dad4ea5d65388261, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1214,6 +1246,7 @@ GameObject:
   - component: {fileID: 557435875}
   - component: {fileID: 557435877}
   - component: {fileID: 557435878}
+  - component: {fileID: 557435879}
   m_Layer: 0
   m_Name: DigiPhant Controls
   m_TagString: Untagged
@@ -1401,7 +1434,7 @@ MonoBehaviour:
   steering:
     combination: 1
     sources:
-    - performer: 1
+    - performer: 2
       movement: 4
       weight: 1
     sensitivity: 1
@@ -1429,6 +1462,41 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StudentWork.StudentSignalDiagnostics
   show: 1
+  logToFile: 1
+--- !u!114 &557435879
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 557435874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 882f4b02bfc7240dd9d2d0b7c885f938, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DigiPhant.DigiPhantPoseActions
+  driver: 1
+  navigator: 2
+  actionPivot: {fileID: 186644802}
+  rearPivot: {x: 0, y: 0.8, z: -1.2}
+  kneeLiftThreshold: 0.45
+  jumpHeight: 1.2
+  jumpSeconds: 0.7
+  jumpForwardDistance: 2.5
+  jumpCooldown: 1.2
+  tPoseSpreadMin: 0.8
+  tPoseHandMin: 0.6
+  tPoseHandMax: 1.5
+  tPoseHoldSeconds: 0.6
+  turnSeconds: 1.4
+  turnCooldown: 2
+  rearHandOn: 1.5
+  rearHandOff: 1.1
+  rearSpreadMax: 0.4
+  rearHoldSeconds: 0.4
+  rearDegrees: 35
+  rearBlendSpeed: 4
+  showSignals: 1
 --- !u!1 &626880299
 GameObject:
   m_ObjectHideFlags: 0
@@ -2809,7 +2877,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 1659885049}
+  - {fileID: 186644802}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2121699801
