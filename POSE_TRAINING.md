@@ -42,7 +42,49 @@ When moves collide, the order is **Rear up > About-turn > Jump > Travel and turn
 
 The panel in the top right shows each person's six signals live, measured from their neutral pose (0 = neutral). Those are the numbers you're tuning against.
 
-## 4. Record training takes
+## 4. Tune the continuous controls (P1 travel, P2 steering, P3 trunk)
+
+The method is the same for each: do the move, read that person's numbers in the readout, then type settings into the Inspector (select **DigiPhant Controls**).
+
+**Changes made during Play are lost when you stop.** Write the values down, or right-click the component's title → **Copy Component**, stop Play, then right-click → **Paste Component Values**.
+
+### P1 (driver): travel (Digi Phant Locomotion → Forward)
+
+1. Have P1 move their left hand **waist → shoulder → overhead → down by the thigh**, and note **P1 LeftHandHeight** at each position.
+2. **Sensitivity** = 1 ÷ the overhead reading. For example, overhead 1.4 → 0.7, so full speed is at overhead.
+3. **Dead Zone:** how far the number wobbles while P1 holds still at the waist, × Sensitivity. For example, 0.15 × 0.7 ≈ 0.1. Raise it if the elephant creeps.
+4. **Run Threshold** (in Digi Phant Locomotion) ≈ the shoulder reading × Sensitivity. For example, 1.0 × 0.7 = 0.7: walk below the shoulder, run above it.
+5. **Backward:** a hand down by the thigh only reaches about −0.3 to −0.4, so reversing is slow. Raise **Backward Speed** if needed.
+
+The jump threshold comes from the analyzer in step 6. P1's knee also lifts the elephant's front-right leg; that's the starter's own mapping, and it's intended.
+
+### P2 (navigator): steering (Digi Phant Locomotion → Steering)
+
+1. Have P2 lean as far as is comfortable each way, hips still, and note **P2 Lean**. The playbook expects about ±0.3.
+2. **Sensitivity** = 1 ÷ that lean (0.3 → about 3, the maximum).
+3. **Dead Zone:** how much P2 wobbles standing upright, × Sensitivity. The playbook's 0.08 × 3 ≈ 0.24.
+4. **Turn Degrees Per Second:** the playbook suggests 90 (the default is 60).
+5. **Direction check:** P2 leaning to *their own* left must turn the elephant left. If it's backwards, set the source **Weight** to **−1**.
+
+The T-pose and arms-overhead thresholds come from the analyzer in step 6. P2's lean also sways the tail.
+
+### P3: trunk (Digi Phant Controller → Controls → Trunk curl)
+
+1. Have P3 raise their right hand from the waist to their highest trunk position, and note **P3 RightHandHeight**.
+2. **Sensitivity** = 1 ÷ that reading (1.6 → about 0.6).
+3. **Degrees:** curl per trunk joint (12 by default). Make it bigger for more curl, or negative if it curls the wrong way.
+4. **Smoothing:** try **12** (the default is 8) for a responsive trunk, as the playbook asks.
+5. P3 also drives **Head turn** (their lean) and the **ears** (how far apart their hands are), so raising the hand flaps the ears a little. Set the ear controls' **Sensitivity** to 0 if that's unwanted.
+
+### Smoothing works the opposite way to the playbook
+
+The playbook's 0.7, 0.6 and 0.5 mean "keep this much of the old value", so a bigger number is slower. Unity's **Smoothing** is a speed, so **a bigger number is more responsive**. Don't copy the playbook's numbers across.
+- Travel and steering share **Input Smoothing** (Digi Phant Locomotion, default 6). Lower it if jittery, raise it if laggy.
+- Each body part has its own **Smoothing**.
+
+**Done when:** P1 walks, runs and stops cleanly, P2 steers both ways, and P3's trunk follows their hand.
+
+## 5. Record training takes
 
 Use the **Log signals** button at the top of that panel. Record one take per row below, about 5 seconds each, **holding the pose the whole time**. Click **Log signals** to start and **Stop signal log** to finish. Each take saves a new file in `Paladin_Digiphant/Paladin_Digiphant/Recordings/`.
 
@@ -58,7 +100,7 @@ As you go, write down which file is which pose. The file names only contain the 
 
 Record 2–3 takes of each pose if you can, ideally with each of us trying the P2 poses. More takes make the thresholds work for more people.
 
-## 5. Get the thresholds
+## 6. Get the thresholds
 
 From the repo folder, run:
 
@@ -83,7 +125,7 @@ Stop Play, select **DigiPhant Controls**, and type each value into **Digi Phant 
 - **OVERLAP:** that signal can't tell the two poses apart. Make the pose bigger, check that the performer is fully in frame, and re-record. Don't pick a number by hand to force it.
 - **Neutral warning:** the neutral take wasn't near 0, so recalibrate and re-record.
 
-## 6. Test, in the playbook's drill order
+## 7. Test, in the playbook's drill order
 
 1. **Each role on its own.** Do every move 10 times and count misses and false triggers. Keep the count; it's evidence for the write-up.
 2. **P1 and P2 driving a figure-eight**, with walk, lean and the occasional T-pose.
