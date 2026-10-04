@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 $StarterUrl = "https://github.com/kommanderpi/studentstarter.git"
-$StarterCommit = "8f426f675f86d938bf3dbec23d6a7ee2479d2c1d"
+$StarterCommit = "5adcbea1f7b311b8bb15c17b3dc4742ae8fff3af"
 
 $Root = $PSScriptRoot
 $Project = Join-Path $Root "Paladin_Digiphant\Paladin_Digiphant"
@@ -15,7 +15,14 @@ $VenvPython = Join-Path $Tracking ".venv\Scripts\python.exe"
 
 Write-Host "1/3  Instructor starter"
 if (Test-Path (Join-Path $Starter ".git")) {
-    Write-Host "     already present, keeping it: $Starter"
+    if (git -C $Starter status --porcelain) {
+        Write-Host "     has local edits, leaving it as is (not updated to $($StarterCommit.Substring(0,7)))"
+    } else {
+        git -C $Starter fetch -q origin
+        git -C $Starter -c advice.detachedHead=false checkout -q $StarterCommit
+        if ($LASTEXITCODE -ne 0) { throw "git checkout failed" }
+        Write-Host "     up to date at $($StarterCommit.Substring(0,7))"
+    }
 } else {
     git clone $StarterUrl $Starter
     if ($LASTEXITCODE -ne 0) { throw "git clone failed" }

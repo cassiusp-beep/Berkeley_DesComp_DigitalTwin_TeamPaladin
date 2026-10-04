@@ -5,7 +5,7 @@
 set -euo pipefail
 
 STARTER_URL="https://github.com/kommanderpi/studentstarter.git"
-STARTER_COMMIT="8f426f675f86d938bf3dbec23d6a7ee2479d2c1d"
+STARTER_COMMIT="5adcbea1f7b311b8bb15c17b3dc4742ae8fff3af"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$ROOT/Paladin_Digiphant/Paladin_Digiphant"
@@ -14,7 +14,13 @@ TRACKING="$STARTER/Tracking"
 
 echo "1/3  Instructor starter"
 if [ -d "$STARTER/.git" ]; then
-  echo "     already present, keeping it: $STARTER"
+  if [ -n "$(git -C "$STARTER" status --porcelain)" ]; then
+    echo "     has local edits, leaving it as is (not updated to ${STARTER_COMMIT:0:7})"
+  else
+    git -C "$STARTER" fetch -q origin
+    git -C "$STARTER" -c advice.detachedHead=false checkout -q "$STARTER_COMMIT"
+    echo "     up to date at ${STARTER_COMMIT:0:7}"
+  fi
 else
   git clone "$STARTER_URL" "$STARTER"
   git -C "$STARTER" -c advice.detachedHead=false checkout "$STARTER_COMMIT"
