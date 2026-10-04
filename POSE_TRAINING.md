@@ -7,12 +7,15 @@ This is how we get the Pose Playbook's moves working on our camera. The elephant
 | Who | Move | Elephant does | Status |
 |---|---|---|---|
 | P1 (left) | Left hand up or down from the waist | Walk or run forward, back up | Starter, working |
-| P1 | Right knee lift | Jump. It's a forward jump if travelling, otherwise in place | **New, needs tuning** |
+| P1 | Right knee lift | Jump. It's a forward jump if travelling, otherwise in place | Tuned (session 1) |
 | P2 (centre) | Lean left or right | Turn | Starter, moved to P2 by the setup menu |
-| P2 | T-pose, held 0.6 s | 180° about-turn | **New, needs tuning** |
-| P2 | Both arms straight overhead, held 0.4 s | Rear up | **New, needs tuning** |
+| P2 | T-pose, held 0.6 s | 180° about-turn | Tuned (session 1) |
+| P2 | Both arms straight overhead, held 0.4 s | Rear up | Tuned (session 1) |
 | P3 (right) | Right hand height | Trunk curl | Starter, working |
-| P3 | Hand gesture or floor-level hand | Grab | Not built yet (see the end) |
+| P3 | Lean left or right | Trunk swing left or right (later: right hand to the side) | **New, needs testing** |
+| P3 | Squat with the right hand low | Reach | **New, needs testing** |
+| P3 | Hold the reach 1 s near the log | Pick up the log, then carry it; hold again after standing up to drop it | **New, needs testing** |
+| P3 | Fist / open hand | Carry / drop with a hand gesture | Not built yet (see the end) |
 
 When moves collide, the order is **Rear up > About-turn > Jump > Travel and turn**. While the elephant rears or turns around, it ignores P1's travel and P2's lean.
 
@@ -143,6 +146,38 @@ Tune these in the Inspector if needed:
 - **Rear Pivot**: where the elephant's rear hips are, in the pivot's own space. If the elephant swings around the wrong point when rearing, move it.
 - **Hold seconds**: hold longer if poses trigger too easily, shorter if they feel slow.
 
+## P3 trunk moves (Freddie)
+
+**One-time setup:** stop Play, open `DigiPhant_Student`, click **DigiPhant → Set Up Trunk Actions**, then press **Cmd+S**. This adds:
+- a **Trunk swing** control
+- a brown **Carry Log** on the ground 6 units in front of the elephant
+- the **Digi Phant Trunk Actions** component
+
+**Check the swing direction first (no camera needed):**
+1. Press Play and choose **Test sliders**.
+2. Drag the **Trunk swing** slider. The trunk should sweep left and right.
+3. If it bends up or down instead, stop Play, open **Controls → Trunk swing** and change **Local Axis** from (0, 1, 0) to (1, 0, 0).
+
+**How it plays:**
+- **Reach:** Freddie squats with his right hand low. The panel at the bottom right shows **P3 trunk: Reach**.
+- **Pick up:** P1 walks the elephant up to the log. Freddie holds the reach for **1 second** and the panel shows **Picked up**. The log now follows the trunk tip.
+  - The elephant must be at **walking speed or slower**; otherwise the panel shows **too fast to grab**.
+  - The trunk tip must be within **2.5 units** of the log; otherwise the panel shows **nothing in range**.
+- **Drop:** Freddie stands up, then squats and holds again. The log is dropped where the trunk is.
+
+**Inspector fields** (Digi Phant Trunk Actions):
+
+| Field | Meaning |
+|---|---|
+| Squat On / Squat Off | Squat thresholds: 0.25 / 0.12, from session 1's squat take |
+| Reach Hand Max | Set to 3 to allow a reach without the hand being low |
+| Grab Hold Seconds | How long to hold the reach before it picks up or drops |
+| Max Grab Speed | Grabs are ignored above this speed |
+| Pickup Radius | How close the trunk tip must be to the log |
+| Carry Offset | Where the log hangs from the trunk tip |
+
+**Testing without the camera:** the **⋮** menu on the component has **Test: pick up or drop** and **Reset prop to its start**.
+
 ## Our tuning record
 
 **Session 1, 4 Oct 2026.** All three of us were recorded with Guided recording, using the MacBook Pro's built-in webcam and zone tracking. All three were tracked through every take with no gaps.
@@ -171,7 +206,7 @@ The raw takes are in `Paladin_Digiphant/Paladin_Digiphant/Recordings/` on the re
 
 ## Known gaps
 
-- **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `Tracking/bridge.py`, a tracker change. The tracker now lives in this repo, so it can be edited directly. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
+- **Grab by hand gesture (P3):** not built yet. The squat-and-hold grab above is the fallback that works now. The playbook's version needs a Gesture Recognizer in `Tracking/bridge.py`, a tracker change. The tracker now lives in this repo, so it can be edited directly. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
 - **Trunk swing (P3):** needs a new `RightHandSide` signal, which is also a `bridge.py` change.
 - **The playbook's "P1 must return to neutral after a rear or turn":** not built yet. Travel picks up again as soon as the action ends, so P1 should drop their hand before the action finishes.
 - **Forward jumps ignore the stage edge.** A jump near the boundary can carry the elephant past it.

@@ -36,7 +36,10 @@ namespace DigiPhant
         public float rearHoldSeconds = .4f, rearDegrees = 35f, rearBlendSpeed = 4f;
 
         [Header("Tuning aids")]
+        [Tooltip("Show the status bar (pose action, trunk, recording buttons) at the top right.")]
         public bool showSignals = true;
+        [Tooltip("Expand the live numbers table under the status bar.")]
+        public bool showNumbers;
 
         [Header("Guided recording (no clicker needed)")]
         [Tooltip("Seconds to get into each pose before recording starts.")]
@@ -286,13 +289,106 @@ namespace DigiPhant
 
         void Fail(string message) { StopLog(); guide = GuideStage.Failed; guideMessage = message; guideStageStart = Time.realtimeSinceStartup; }
 
+        // ---------- On-screen UI: black on white, Helvetica Neue (Arial where it isn't installed) ----------
+
+        static readonly Color Ink = DigiPhantUi.Ink, Muted = DigiPhantUi.Muted, Ready = DigiPhantUi.Ready, Go = DigiPhantUi.Go, Stop = DigiPhantUi.Stop;
+        static float Px(float points) => DigiPhantUi.Px(points);
+        static GUIStyle Text(float size, Color color, FontStyle weight = FontStyle.Normal, TextAnchor align = TextAnchor.MiddleLeft) =>
+            DigiPhantUi.Text(size, color, weight, align);
+        static GUIStyle Button(float size = DigiPhantUi.Body) => DigiPhantUi.Button(size);
+        static void Panel(Rect r, float border = 1) => DigiPhantUi.Panel(r, border);
+
+        void OnGUI()
+        {
+            if (controller == null) return;
+            GUI.depth = -10; // above the starter's panels, so the guide is never hidden
+            if (showSignals) DrawStatusBar();
+            DrawGuide(Time.realtimeSinceStartup); // last, so it sits on top
+        }
+
+        // One slim bar: Pose action | Trunk | Guided recording | Log signals | Numbers. The 18 readouts open on demand.
+        void DrawStatusBar()
+        {
+            float now = Time.realtimeSinceStartup, h = Px(40), pad = Px(14);
+            var trunk = GetComponent<DigiPhantTrunkActions>();
+            var label = Text(DigiPhantUi.Small, Muted, FontStyle.Bold);
+            var value = Text(DigiPhantUi.Body, Ink, FontStyle.Bold);
+            var button = Button();
+            string guideText = "Guided recording", logText = log != null ? "Stop signal log" : "Log signals";
+            string numbersText = showNumbers ? "Hide numbers" : "Show numbers";
+
+            var parts = new System.Collections.Generic.List<(string label, string value)> { ("Pose action", CurrentPoseAction) };
+            if (trunk) parts.Add(("Trunk", trunk.CurrentTrunkAction));
+            float textWidth = 0;
+            foreach (var (l, v) in parts)
+                textWidth += label.CalcSize(new GUIContent(l + "  ")).x + Mathf.Max(Px(64), value.CalcSize(new GUIContent(v)).x) + Px(21);
+            float bw(string s) => button.CalcSize(new GUIContent(s)).x + Px(8);
+            float gap = Px(8);
+            float w = pad + textWidth + bw(guideText) + bw(logText) + bw(numbersText) + 3 * gap + pad;
+            var bar = new Rect(Screen.width - w - Px(12), Px(12), w, h);
+            Panel(bar);
+
+            float x = bar.x + pad;
+            foreach (var (l, v) in parts)
+            {
+                float lw = label.CalcSize(new GUIContent(l + "  ")).x, vw = Mathf.Max(Px(64), value.CalcSize(new GUIContent(v)).x);
+                GUI.Label(new Rect(x, bar.y, lw, h), l, label); x += lw;
+                GUI.Label(new Rect(x, bar.y, vw, h), v, value); x += vw + Px(10);
+                GUI.DrawTexture(new Rect(x, bar.y + Px(10), 1, h - Px(20)), DigiPhantUi.Light); x += Px(11);
+            }
+            bool guiding = guide != GuideStage.Off;
+            GUI.enabled = !guiding;
+            float bh = Px(DigiPhantUi.ControlHeight), by = bar.y + (h - bh) / 2;
+            if (GUI.Button(new Rect(x, by, bw(guideText), bh), guideText, button)) StartGuide(now);
+            x += bw(guideText) + gap;
+            if (GUI.Button(new Rect(x, by, bw(logText), bh), logText, button)) { if (log == null) StartLog(); else StopLog(); }
+            x += bw(logText) + gap;
+            GUI.enabled = true;
+            if (GUI.Button(new Rect(x, by, bw(numbersText), bh), numbersText, button)) showNumbers = !showNumbers;
+
+            if (showNumbers) DrawNumbers(new Rect(bar.xMax - Px(290), bar.yMax + Px(8), Px(290), 0), now);
+        }
+
+        // Rows = the six signals, columns = performers. Values are measured from each person's neutral pose.
+        void DrawNumbers(Rect area, float now)
+        {
+            var moves = (Movement[])System.Enum.GetValues(typeof(Movement));
+            int people = controller.performerCount;
+            float row = Px(17), nameW = Px(100), colW = (area.width - nameW - Px(14)) / Mathf.Max(1, people);
+            area.height = Px(20) + row * (moves.Length + 1);
+            Panel(area);
+            var head = Text(DigiPhantUi.Small, Ink, FontStyle.Bold, TextAnchor.MiddleCenter);
+            var name = Text(DigiPhantUi.Small, Muted);
+            var num = Text(DigiPhantUi.Small, Ink, FontStyle.Normal, TextAnchor.MiddleRight);
+            float y = area.y + Px(10), x0 = area.x + Px(12);
+            for (int p = 1; p <= people; p++)
+                GUI.Label(new Rect(x0 + nameW + (p - 1) * colW, y, colW, row), "P" + p, head);
+            y += row;
+            foreach (Movement m in moves)
+            {
+                GUI.Label(new Rect(x0, y, nameW, row), m.ToString(), name);
+                for (int p = 1; p <= people; p++)
+                {
+                    float v = Read(p, m, now), cx = x0 + nameW + (p - 1) * colW;
+                    if (!float.IsNaN(v))
+                    {
+                        // Small black bar from the column centre: right = above neutral, left = below.
+                        float half = colW * .22f, mid = cx + half + Px(3), len = Mathf.Clamp(v / 2f, -1, 1) * half;
+                        GUI.DrawTexture(new Rect(Mathf.Min(mid, mid + len), y + row / 2 - Px(1.5f), Mathf.Max(1, Mathf.Abs(len)), Px(3)), DigiPhantUi.Black);
+                    }
+                    GUI.Label(new Rect(cx, y, colW - Px(4), row), float.IsNaN(v) ? "—" : v.ToString("+0.00;-0.00"), num);
+                }
+                y += row;
+            }
+        }
+
         void DrawGuide(float now)
         {
             if (guide == GuideStage.Off) return;
             var takes = GuideTakes();
             float elapsed = now - guideStageStart;
             string step = "", title = "", detail = "", count = "";
-            Color accent = Color.white;
+            Color accent = Ink;
             switch (guide)
             {
                 case GuideStage.Calibrating:
@@ -300,7 +396,7 @@ namespace DigiPhant
                     title = "STAND IN YOUR ZONE";
                     detail = "P" + driver + " and P" + trunkPerformer + ": one hand at your waist.   P" + navigator + ": arms down.\nHold still.";
                     count = Mathf.CeilToInt(Mathf.Max(0, 10 - elapsed)).ToString();
-                    accent = new Color(1f, .75f, .2f);
+                    accent = Ready;
                     break;
                 case GuideStage.Ready:
                 case GuideStage.Hold:
@@ -311,84 +407,35 @@ namespace DigiPhant
                     detail = take.instruction;
                     float left = (hold ? holdSeconds : getReadySeconds) - elapsed;
                     count = (hold ? "HOLD  " : "GET READY  ") + Mathf.CeilToInt(Mathf.Max(0, left));
-                    accent = hold ? new Color(.3f, 1f, .4f) : new Color(1f, .75f, .2f);
+                    accent = hold ? Go : Ready;
                     break;
                 case GuideStage.Done:
                     title = "ALL DONE";
                     detail = $"{takes.Length} recordings saved in the Recordings folder.\nPress Stop and tell Claude \"done\".";
-                    accent = new Color(.3f, 1f, .4f);
+                    accent = Go;
                     break;
                 case GuideStage.Failed:
                     title = "STOPPED";
                     detail = guideMessage;
-                    accent = new Color(1f, .4f, .35f);
+                    accent = Stop;
                     break;
             }
 
             float w = Screen.width * .7f, h = Screen.height * .62f;
             var box = new Rect((Screen.width - w) / 2, (Screen.height - h) / 2, w, h);
-            var previous = GUI.color;
-            GUI.color = new Color(0, 0, 0, .82f);
-            GUI.DrawTexture(box, Texture2D.whiteTexture);
-            GUI.color = previous;
-
-            int unit = Mathf.Max(12, Screen.height / 28);
-            GUIStyle Style(int size, Color color, FontStyle font = FontStyle.Bold) => new GUIStyle(GUI.skin.label)
-            { fontSize = size, alignment = TextAnchor.MiddleCenter, wordWrap = true, fontStyle = font, normal = { textColor = color } };
-
-            float y = box.y + unit;
-            GUI.Label(new Rect(box.x, y, w, unit * 1.4f), step, Style(unit, new Color(.8f, .8f, .8f))); y += unit * 1.6f;
-            GUI.Label(new Rect(box.x, y, w, unit * 3f), title, Style(unit * 2, accent)); y += unit * 3.2f;
-            GUI.Label(new Rect(box.x + unit, y, w - unit * 2, unit * 4.5f), detail, Style(Mathf.RoundToInt(unit * 1.1f), Color.white, FontStyle.Normal)); y += unit * 4.8f;
-            if (count.Length > 0) GUI.Label(new Rect(box.x, y, w, unit * 3.4f), count, Style(Mathf.RoundToInt(unit * 2.6f), accent));
+            Panel(box, Px(1.5f));
+            float unit = Mathf.Max(9, Screen.height / 28f / DigiPhantUi.Scale), u = Px(unit);
+            float y = box.y + u;
+            GUI.Label(new Rect(box.x, y, w, u * 1.4f), step, Text(unit, Muted, FontStyle.Bold, TextAnchor.MiddleCenter)); y += u * 1.6f;
+            GUI.Label(new Rect(box.x, y, w, u * 3f), title, Text(unit * 2, Ink, FontStyle.Bold, TextAnchor.MiddleCenter)); y += u * 3.2f;
+            GUI.Label(new Rect(box.x + u, y, w - u * 2, u * 4.5f), detail, Text(unit * 1.1f, Ink, FontStyle.Normal, TextAnchor.MiddleCenter)); y += u * 4.8f;
+            if (count.Length > 0) GUI.Label(new Rect(box.x, y, w, u * 3.4f), count, Text(unit * 2.6f, accent, FontStyle.Bold, TextAnchor.MiddleCenter));
+            var close = new Rect(box.xMax - Px(76), box.y + Px(8), Px(68), Px(DigiPhantUi.ControlHeight));
             if (guide == GuideStage.Ready || guide == GuideStage.Hold || guide == GuideStage.Calibrating)
             {
-                if (GUI.Button(new Rect(box.xMax - 110, box.y + 10, 100, 24), "Cancel")) { controller.CancelCalibrationCountdown(); StopGuide(); }
+                if (GUI.Button(close, "Cancel", Button())) { controller.CancelCalibrationCountdown(); StopGuide(); }
             }
-            else if (GUI.Button(new Rect(box.xMax - 110, box.y + 10, 100, 24), "Close")) guide = GuideStage.Off;
+            else if (GUI.Button(close, "Close", Button())) guide = GuideStage.Off;
         }
-
-        // Live readout (the button uses IMGUI, so it works with either Unity input system) of each performer's calibrated values. Strike a pose, read the numbers, set thresholds.
-        void OnGUI()
-        {
-            if (controller == null) return;
-            GUI.depth = -10; // above the starter's panels, so the guide is never hidden
-            if (showSignals) DrawSignals();
-            DrawGuide(Time.realtimeSinceStartup); // last, so it sits on top of the readout
-        }
-
-        void DrawSignals()
-        {
-            float now = Time.realtimeSinceStartup, w = 360, x = Screen.width - w - 10, y = 10;
-            GUI.Box(new Rect(x - 6, y - 4, w + 12, 26 + controller.performerCount * 112), GUIContent.none);
-            GUI.Label(new Rect(x, y, w - 220, 20), $"<b>Pose action:</b> {CurrentPoseAction}", Rich());
-            bool guiding = guide != GuideStage.Off;
-            GUI.enabled = !guiding;
-            if (GUI.Button(new Rect(x + w - 215, y, 105, 20), "Guided recording")) StartGuide(now);
-            if (GUI.Button(new Rect(x + w - 105, y, 105, 20), log != null ? "Stop signal log" : "Log signals"))
-            { if (log == null) StartLog(); else StopLog(); }
-            GUI.enabled = true;
-            y += 22;
-            for (int p = 1; p <= controller.performerCount; p++)
-            {
-                GUI.Label(new Rect(x, y, w, 18), $"<b>P{p}</b>", Rich()); y += 16;
-                foreach (Movement m in System.Enum.GetValues(typeof(Movement)))
-                {
-                    float v = Read(p, m, now);
-                    GUI.Label(new Rect(x, y, 130, 16), m.ToString());
-                    GUI.Label(new Rect(x + 130, y, 50, 16), float.IsNaN(v) ? "—" : v.ToString("+0.00;-0.00"));
-                    if (!float.IsNaN(v))
-                    {
-                        float half = 55, mid = x + 185 + half, len = Mathf.Clamp(v / 2f, -1, 1) * half;
-                        GUI.Box(new Rect(Mathf.Min(mid, mid + len), y + 4, Mathf.Abs(len), 8), GUIContent.none);
-                    }
-                    y += 15;
-                }
-                y += 6;
-            }
-        }
-
-        static GUIStyle rich;
-        static GUIStyle Rich() => rich ??= new GUIStyle(GUI.skin.label) { richText = true };
     }
 }

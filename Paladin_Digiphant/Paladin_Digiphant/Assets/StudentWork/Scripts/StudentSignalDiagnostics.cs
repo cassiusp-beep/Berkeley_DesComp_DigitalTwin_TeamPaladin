@@ -57,6 +57,9 @@ namespace StudentWork
         void OnGUI()
         {
             if (!show || controller == null || controller.inputMode != InputMode.Camera) return;
+            // The pose-action status bar (Show numbers) now covers this readout; avoid drawing two boxes in the same corner.
+            var bar = GetComponent<DigiPhantPoseActions>();
+            if (bar && bar.isActiveAndEnabled && bar.showSignals) return;
             style ??= new GUIStyle(GUI.skin.label) { fontSize = 13, richText = true };
             float now = Time.realtimeSinceStartup;
             float width = 260, height = 36 + controller.performerCount * (Names.Length * 17 + 22);

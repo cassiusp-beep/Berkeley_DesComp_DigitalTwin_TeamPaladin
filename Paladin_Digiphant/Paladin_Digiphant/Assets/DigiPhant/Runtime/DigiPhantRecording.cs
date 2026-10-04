@@ -146,17 +146,19 @@ namespace DigiPhant
         {
             if (IsRecording)
             {
-                GUILayout.Label("RECORDING · " + Mathf.FloorToInt(Time.realtimeSinceStartup - started) + " seconds");
-                if (GUILayout.Button("Stop recording and save")) StopRecording();
+                GUILayout.Label("RECORDING  " + Mathf.FloorToInt(Time.realtimeSinceStartup - started) + " s",
+                    DigiPhantUi.Text(DigiPhantUi.Body, DigiPhantUi.Stop, FontStyle.Bold), GUILayout.Width(width));
+                if (GUILayout.Button("Stop recording and save", DigiPhantUi.Button(DigiPhantUi.Body, true))) StopRecording();
             }
             else
             {
                 bool wasEnabled = GUI.enabled;
                 GUI.enabled = wasEnabled && encoder == null;
-                if (GUILayout.Button("Record performance")) BeginRecording();
+                if (GUILayout.Button("Record performance", DigiPhantUi.RecordButton())) BeginRecording();
                 GUI.enabled = wasEnabled;
             }
-            GUILayout.Label(Status, new GUIStyle(GUI.skin.label) { wordWrap = true }, GUILayout.Width(width));
+            if (!string.IsNullOrEmpty(Status))
+                DigiPhantUi.Note(Status, width);
         }
         void OnDisable()
         {

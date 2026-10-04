@@ -53,6 +53,8 @@ namespace DigiPhant
         [Min(.1f)] public float trackingTimeout = .5f;
         public bool showControls = true;
         public bool showCameraPreview = true;
+        [Tooltip("On-screen UI scale. 0 = automatic (2x on Retina). Set 1, 1.5, 2… if the text looks too small or large.")]
+        [Range(0, 3)] public float uiScale;
         public string Status { get; private set; } = "Test sliders ready";
         public int ReceivedFrames { get; private set; }
         public bool IsCalibrated { get; private set; }
@@ -65,6 +67,7 @@ namespace DigiPhant
         readonly Dictionary<Transform, Quaternion> rest = new Dictionary<Transform, Quaternion>();
         UdpClient socket;
         Vector2 scroll;
+        bool showBodySliders;
         float nextCountRequest;
         int previousCount;
         InputMode previousMode;
@@ -327,7 +330,8 @@ namespace DigiPhant
             var stageCamera = Camera.main;
             if (stageCamera != null)
             {
-                float left = showControls ? (Mathf.Min(350, Screen.width * .32f) + 20) / Mathf.Max(1, Screen.width) : 0;
+                DigiPhantUi.ScaleOverride = uiScale;
+                float left = showControls ? DigiPhantUi.PanelWidth / Mathf.Max(1, Screen.width) : 0;
                 stageCamera.rect = new Rect(left, 0, 1 - left, 1);
             }
         }
@@ -335,55 +339,78 @@ namespace DigiPhant
         void OnGUI()
         {
             if (!showControls) return;
-            float width = Mathf.Min(350, Screen.width * .32f);
-            GUI.DrawTexture(new Rect(0, 0, width + 20, Screen.height), Texture2D.blackTexture, ScaleMode.StretchToFill, false);
-            var labelStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
-            void Label(string text) => GUILayout.Label(text, labelStyle, GUILayout.Width(width - 32));
-            GUILayout.BeginArea(new Rect(10, 10, width, Screen.height - 20), GUI.skin.box);
-            GetComponent<DigiPhantCameraPreview>()?.DrawInline(width - 20);
-            GetComponent<DigiPhantRecording>()?.DrawControls(width - 32);
+            DigiPhantUi.ScaleOverride = uiScale;
+            float panel = DigiPhantUi.PanelWidth, edge = DigiPhantUi.Px(10);
+            float width = panel - 2 * edge, inner = width - DigiPhantUi.Px(10), now = Time.realtimeSinceStartup;
+            var previousSkin = GUI.skin;
+            GUI.skin = DigiPhantUi.Skin;
+            // White side panel with a thin rule on its right edge.
+            GUI.DrawTexture(new Rect(0, 0, panel, Screen.height), DigiPhantUi.White);
+            GUI.DrawTexture(new Rect(panel - 1, 0, 1, Screen.height), DigiPhantUi.Light);
+            var note = DigiPhantUi.Text(DigiPhantUi.Small, DigiPhantUi.Muted);
+            void Note(string text) => DigiPhantUi.Note(text, inner);
+
+            GUILayout.BeginArea(new Rect(edge, edge, width, Screen.height - 2 * edge));
+            GUILayout.Label("DIGIPHANT", DigiPhantUi.Text(DigiPhantUi.Title, DigiPhantUi.Ink, FontStyle.Bold));
+            GUILayout.Space(DigiPhantUi.Px(4));
+            GetComponent<DigiPhantCameraPreview>()?.DrawInline(width);
             scroll = GUILayout.BeginScrollView(scroll);
-            Label("DIGIPHANT | collective digital twin");
-            Label("Choose your group size");
-            int count = GUILayout.Toolbar(performerCount - 1, new[] { "1", "2", "3", "4" }) + 1;
+
+            DigiPhantUi.Section("SETUP");
+            int count = DigiPhantUi.Segmented("People", DigiPhantUi.PeopleIcon, performerCount - 1, "1", "2", "3", "4") + 1;
             if (count != performerCount) SetPerformerCount(count);
-            bool upper = GUILayout.Toolbar(upperBodyOnly ? 1 : 0, new[] { "Full body", "Seated / upper body" }) == 1;
+            bool upper = DigiPhantUi.Segmented("Body", DigiPhantUi.BodyIcon, upperBodyOnly ? 1 : 0, "Full body", "Seated") == 1;
             if (upper != upperBodyOnly) SetUpperBodyOnly(upper);
-            if (upperBodyOnly) Label("Keep shoulders and hands visible. Raise hands for legs; tilt shoulders for steering, head and tail. Solo: left hand also drives travel; right hand curls trunk.");
-            int mode = GUILayout.Toolbar((int)inputMode, new[] { "Test sliders", "Camera" });
+            int mode = DigiPhantUi.Segmented("Input", DigiPhantUi.InputIcon, (int)inputMode, "Test sliders", "Camera");
             if (mode != (int)inputMode) SetInputMode((InputMode)mode);
-            Label(Status);
-            GetComponent<DigiPhantLocomotion>()?.DrawControls(width - 32);
+            if (upperBodyOnly) Note("Seated: keep shoulders and hands visible. Hands replace feet for the legs.");
+            GUILayout.Space(DigiPhantUi.Px(2));
+            GUILayout.Label(Status, DigiPhantUi.Text(DigiPhantUi.Body, DigiPhantUi.Ink, FontStyle.Bold), GUILayout.Width(inner));
+
             if (inputMode == InputMode.Camera)
             {
-                for (int i = 1; i <= performerCount; i++)
-                    Label("Performer " + i + (IsTracked(i, Time.realtimeSinceStartup) ? " · visible" : " · waiting / lost"));
-                if (!IsCalibrated) Label("Set neutral pose to begin controlling the elephant.");
+                DigiPhantUi.Section("CAMERA");
+                GUILayout.BeginHorizontal();
+                for (int i = 1; i <= performerCount; i++) { DigiPhantUi.Dot("P" + i, IsTracked(i, now)); GUILayout.Space(DigiPhantUi.Px(8)); }
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
                 if (CalibrationPending)
                 {
-                    int seconds = Mathf.Max(0, Mathf.CeilToInt(calibrationDeadline - Time.realtimeSinceStartup));
-                    Label("Setting neutral pose in " + seconds + " seconds — hold your resting pose.");
-                    if (GUILayout.Button("Cancel countdown")) CancelCalibrationCountdown();
+                    int seconds = Mathf.Max(0, Mathf.CeilToInt(calibrationDeadline - now));
+                    GUILayout.Label("Hold your neutral pose… " + seconds, DigiPhantUi.Text(DigiPhantUi.Body, DigiPhantUi.Ready, FontStyle.Bold), GUILayout.Width(inner));
                 }
-                else if (GUILayout.Button("Set neutral pose (10 seconds)"))
-                    BeginCalibrationCountdown(Time.realtimeSinceStartup);
+                else if (!IsCalibrated) Note("Everyone in their zone, then set neutral pose.");
+                GUILayout.BeginHorizontal();
+                if (CalibrationPending) { if (GUILayout.Button("Cancel countdown")) CancelCalibrationCountdown(); }
+                else if (GUILayout.Button("Set neutral pose (10 s)", DigiPhantUi.Button(DigiPhantUi.Body, !IsCalibrated))) BeginCalibrationCountdown(now);
                 if (GUILayout.Button("Reassign people")) ReassignPeople();
-                Label("Hold a comfortable pose, then set neutral.");
+                GUILayout.EndHorizontal();
             }
-            else
+
+            var recording = GetComponent<DigiPhantRecording>();
+            if (recording) { DigiPhantUi.Section("RECORD"); recording.DrawControls(inner); }
+
+            var locomotion = GetComponent<DigiPhantLocomotion>();
+            if (locomotion) { DigiPhantUi.Section("MOVEMENT"); locomotion.DrawControls(inner); }
+
+            if (inputMode == InputMode.TestSliders)
             {
-                Label("Move a slider to test its elephant part.");
-                foreach (var c in controls)
-                {
-                    Label(c.label + "  · P" + c.performer);
-                    c.testValue = GUILayout.HorizontalSlider(c.testValue, -1, 1);
-                }
-                if (GUILayout.Button("Reset body sliders")) ResetControls();
+                DigiPhantUi.Section("BODY PART SLIDERS");
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(showBodySliders ? "Hide" : "Show " + controls.Length + " sliders")) showBodySliders = !showBodySliders;
+                if (showBodySliders && GUILayout.Button("Reset")) ResetControls();
+                GUILayout.EndHorizontal();
+                if (showBodySliders)
+                    foreach (var c in controls)
+                    {
+                        GUILayout.Label(c.label + "  ·  P" + c.performer, note, GUILayout.Width(inner));
+                        c.testValue = GUILayout.HorizontalSlider(c.testValue, -1, 1);
+                    }
             }
-            GUILayout.Space(8);
-            Label("To adapt: stop Play, select DigiPhant Controls,\nthen edit Controls in the Inspector.");
+            GUILayout.Space(DigiPhantUi.Px(10));
             GUILayout.EndScrollView();
             GUILayout.EndArea();
+            GUI.skin = previousSkin;
         }
     }
 }
