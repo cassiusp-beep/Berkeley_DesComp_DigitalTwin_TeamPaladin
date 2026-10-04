@@ -94,11 +94,11 @@ namespace DigiPhant
         void LaunchBridge()
         {
 #if UNITY_EDITOR
-            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../DigiPhantStarter/Tracking"));
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../Tracking"));
             string executable = Path.Combine(folder, Application.platform == RuntimePlatform.WindowsEditor
                 ? ".venv/Scripts/python.exe" : ".venv/bin/python");
             if (!File.Exists(executable) || !File.Exists(Path.Combine(folder, "pose_landmarker_full.task")))
-            { Status = "Camera setup needed: follow DigiPhantStarter/README.md section 3."; return; }
+            { Status = "Camera setup needed: run setup.sh in the repo folder."; return; }
             try
             {
                 lock (outputLock) bridgeOutput = "";

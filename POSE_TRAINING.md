@@ -29,6 +29,7 @@ When moves collide, the order is **Rear up > About-turn > Jump > Travel and turn
 ## 2. Set up the space
 
 - **Camera:** on a tripod with the lens about 1.1 m high (waist to chest), in landscape, 3.8–4.2 m from where you stand.
+- **Zones:** the camera preview shows thin lines splitting it into **P1 zone / P2 zone / P3 zone**. Who's who depends only on which zone you stand in, so each person stays inside their own zone the whole time. Anyone sitting at the laptop is ignored automatically.
 - **Spacing:** 1.8 m centre to centre, in a shallow arc with P1 and P3 about 30 cm forward. Tape an X for each person. Never cross or step in front of each other.
 - **Order:** P1 on the left of the preview image and P3 on the right. The preview isn't mirrored.
 - **Framing:** everyone stays fully in frame from raised hands to feet, including during a knee lift.
@@ -86,9 +87,15 @@ The playbook's 0.7, 0.6 and 0.5 mean "keep this much of the old value", so a big
 
 ## 5. Record training takes
 
-Use the **Log signals** button at the top of that panel. Record one take per row below, about 5 seconds each, **holding the pose the whole time**. Click **Log signals** to start and **Stop signal log** to finish. Each take saves a new file in `Paladin_Digiphant/Paladin_Digiphant/Recordings/`.
+**No clicker needed:** press **▶ Play**, click **3**, **Full body** and **Camera**, then click **Guided recording** in the top-right box. Everyone goes to their zone. A big panel in the middle of the Game view runs the session:
 
-As you go, write down which file is which pose. The file names only contain the time.
+1. **Calibrate:** "Stand in your zone", with a 10-second countdown.
+2. **Each take:** the pose name and who does what, then **GET READY 5…** (orange), then **HOLD 6…** (green) while it records.
+3. **ALL DONE** when every take is saved.
+
+Each take is saved as `Recordings/signals_<time>_<pose>.csv`, so nobody has to remember the order. **Cancel** stops the session at any point. If calibration fails, the panel says why; fix it and press **Guided recording** again. You can change the countdown lengths (**Get Ready Seconds**, **Hold Seconds**) and the squat take in **Digi Phant Pose Actions**.
+
+The takes, in order:
 
 | Take | Who does what | Everyone else |
 |---|---|---|
@@ -97,21 +104,19 @@ As you go, write down which file is which pose. The file names only contain the 
 | `overhead` | P2: both arms straight up, hands close. **Raise them through the front, not out to the sides** | Neutral |
 | `knee` | P1: right knee up, thigh level, held | Neutral |
 | `other` | Things that must *not* trigger: P1 raises their left hand to walk; P2 leans both ways and swings their arms a bit; P2 raises one arm only | Neutral or normal play |
+| `squat` | P3: squat with the right hand low, held (for the trunk actions, coming next) | Neutral |
 
-Record 2–3 takes of each pose if you can, ideally with each of us trying the P2 poses. More takes make the thresholds work for more people.
+Run **Guided recording** 2–3 times if you can, ideally swapping who plays P2. More takes make the thresholds work for more people. (The manual **Log signals** button still works too; its files only have the time in the name.)
 
 ## 6. Get the thresholds
 
 From the repo folder, run:
 
 ```sh
-python3 tools/suggest_thresholds.py \
-  neutral=Paladin_Digiphant/Paladin_Digiphant/Recordings/signals_XXXX.csv \
-  tpose=Paladin_Digiphant/Paladin_Digiphant/Recordings/signals_XXXX.csv \
-  overhead=... knee=... other=...
+python3 tools/suggest_thresholds.py --dir Paladin_Digiphant/Paladin_Digiphant/Recordings
 ```
 
-Repeat a label (`tpose=a.csv tpose=b.csv`) to combine takes. It prints a value for each field:
+It reads every guided take in the folder, by pose name. For manual **Log signals** files, label them yourself: `neutral=signals_A.csv tpose=signals_B.csv …`. It prints a value for each field:
 
 ```
   kneeLiftThreshold    0.51   margin  0.79   P1 RightFootLift: knee lift vs everything else
@@ -138,9 +143,35 @@ Tune these in the Inspector if needed:
 - **Rear Pivot**: where the elephant's rear hips are, in the pivot's own space. If the elephant swings around the wrong point when rearing, move it.
 - **Hold seconds**: hold longer if poses trigger too easily, shorter if they feel slow.
 
+## Our tuning record
+
+**Session 1, 4 Oct 2026.** All three of us were recorded with Guided recording, using the MacBook Pro's built-in webcam and zone tracking. All three were tracked through every take with no gaps.
+
+Measured from neutral (median of each take):
+
+| Pose | Signal | Measured | Notes |
+|---|---|---|---|
+| P2 T-pose | hand heights / arm spread | +0.94…+1.01 / **+0.41** | The spread was the same across runs, so it's how wide P2 reaches. The default threshold (0.8) would never have triggered |
+| P2 arms overhead | hand heights / arm spread | +2.0 / −0.10 | Very clear |
+| P1 knee lift | right foot lift | **+0.28…+0.33** | Below the default threshold (0.45); one run's take failed because the knee wasn't held |
+| P2 lean | lean | ±0.20 | The default steering turned only ~5°/s at this lean |
+| P3 squat | both foot lifts / right hand | +0.6…+0.7 / −0.83 | For the trunk actions (next) |
+
+Values saved in `DigiPhant_Student` (verified in the final run: T-pose → 180° about-turn, overhead → rear up, knee → jump, lean → turns up to 82°):
+
+| Component | Field | Default | Ours |
+|---|---|---|---|
+| Locomotion → Steering | Sensitivity / Dead Zone | 1 / 0.12 | **3 / 0.05** |
+| Locomotion | Turn Degrees Per Second | 60 | **90** |
+| Pose Actions | Knee Lift Threshold | 0.45 | **0.23** (thin margin, 0.11; re-record if the jump misfires) |
+| Pose Actions | T Pose Spread Min / Hand Min / Hand Max | 0.8 / 0.6 / 1.5 | **0.2 / 0.48 / 1.5** |
+| Pose Actions | Rear Hand On / Off / Spread Max | 1.5 / 1.1 / 0.4 | **1.45 / 1.21 / 0.16** |
+
+The raw takes are in `Paladin_Digiphant/Paladin_Digiphant/Recordings/` on the recording laptop. They aren't in Git; copy the ones you need for the write-up.
+
 ## Known gaps
 
-- **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `bridge.py`, a tracker change. Since `Tracking/` comes from the instructor's starter and Git ignores it, we'll move it into this repo first. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
+- **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `Tracking/bridge.py`, a tracker change. The tracker now lives in this repo, so it can be edited directly. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
 - **Trunk swing (P3):** needs a new `RightHandSide` signal, which is also a `bridge.py` change.
 - **The playbook's "P1 must return to neutral after a rear or turn":** not built yet. Travel picks up again as soon as the action ends, so P1 should drop their hand before the action finishes.
 - **Forward jumps ignore the stage edge.** A jump near the boundary can carry the elephant past it.

@@ -10,7 +10,7 @@ STARTER_COMMIT="5adcbea1f7b311b8bb15c17b3dc4742ae8fff3af"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$ROOT/Paladin_Digiphant/Paladin_Digiphant"
 STARTER="$PROJECT/DigiPhantStarter"
-TRACKING="$STARTER/Tracking"
+TRACKING="$PROJECT/Tracking"  # our copy of the tracker (see Tracking/README.md)
 
 echo "1/3  Instructor starter"
 if [ -d "$STARTER/.git" ]; then
@@ -36,6 +36,10 @@ else
 fi
 
 echo "3/3  Camera tracker Python environment"
+if [ ! -f "$TRACKING/pose_landmarker_full.task" ]; then
+  cp "$STARTER/Tracking/pose_landmarker_full.task" "$TRACKING/"
+  echo "     copied the pose model into Tracking/"
+fi
 PY=""
 for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
   if command -v "$candidate" >/dev/null 2>&1; then PY="$candidate"; break; fi
