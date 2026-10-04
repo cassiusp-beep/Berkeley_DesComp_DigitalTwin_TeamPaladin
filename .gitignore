@@ -54,3 +54,7 @@ __pycache__/
 Paladin_Digiphant/Paladin_Digiphant/DigiPhantStarter/
 Paladin_Digiphant/Paladin_Digiphant/Assets/Elephant/
 Paladin_Digiphant/Paladin_Digiphant/Assets/Elephant.meta
+
+# Our tracker copy (Paladin_Digiphant/Paladin_Digiphant/Tracking): code is tracked;
+# the pose model is copied in by setup.sh and .venv/ is ignored above.
+Paladin_Digiphant/Paladin_Digiphant/Tracking/*.task

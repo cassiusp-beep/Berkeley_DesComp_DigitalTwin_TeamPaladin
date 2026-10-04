@@ -10,7 +10,7 @@ $StarterCommit = "5adcbea1f7b311b8bb15c17b3dc4742ae8fff3af"
 $Root = $PSScriptRoot
 $Project = Join-Path $Root "Paladin_Digiphant\Paladin_Digiphant"
 $Starter = Join-Path $Project "DigiPhantStarter"
-$Tracking = Join-Path $Starter "Tracking"
+$Tracking = Join-Path $Project "Tracking"  # our copy of the tracker (see Tracking\README.md)
 $VenvPython = Join-Path $Tracking ".venv\Scripts\python.exe"
 
 Write-Host "1/3  Instructor starter"
@@ -41,6 +41,10 @@ if (Test-Path (Join-Path $Assets "Elephant")) {
 }
 
 Write-Host "3/3  Camera tracker Python environment"
+if (-not (Test-Path (Join-Path $Tracking "pose_landmarker_full.task"))) {
+    Copy-Item -LiteralPath (Join-Path $Starter "Tracking\pose_landmarker_full.task") -Destination $Tracking
+    Write-Host "     copied the pose model into Tracking\"
+}
 if (Test-Path $VenvPython) {
     Write-Host "     .venv already exists, keeping it"
 } else {

@@ -29,6 +29,7 @@ When moves collide, the order is **Rear up > About-turn > Jump > Travel and turn
 ## 2. Set up the space
 
 - **Camera:** on a tripod with the lens about 1.1 m high (waist to chest), in landscape, 3.8–4.2 m from where you stand.
+- **Zones:** the camera preview shows thin lines splitting it into **P1 zone / P2 zone / P3 zone**. Who's who depends only on which zone you stand in, so each person stays inside their own zone the whole time. Anyone sitting at the laptop is ignored automatically.
 - **Spacing:** 1.8 m centre to centre, in a shallow arc with P1 and P3 about 30 cm forward. Tape an X for each person. Never cross or step in front of each other.
 - **Order:** P1 on the left of the preview image and P3 on the right. The preview isn't mirrored.
 - **Framing:** everyone stays fully in frame from raised hands to feet, including during a knee lift.
@@ -140,7 +141,7 @@ Tune these in the Inspector if needed:
 
 ## Known gaps
 
-- **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `bridge.py`, a tracker change. Since `Tracking/` comes from the instructor's starter and Git ignores it, we'll move it into this repo first. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
+- **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `Tracking/bridge.py`, a tracker change. The tracker now lives in this repo, so it can be edited directly. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
 - **Trunk swing (P3):** needs a new `RightHandSide` signal, which is also a `bridge.py` change.
 - **The playbook's "P1 must return to neutral after a rear or turn":** not built yet. Travel picks up again as soon as the action ends, so P1 should drop their hand before the action finishes.
 - **Forward jumps ignore the stage edge.** A jump near the boundary can carry the elephant past it.

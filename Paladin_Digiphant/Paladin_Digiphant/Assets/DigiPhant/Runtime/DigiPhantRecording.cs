@@ -33,10 +33,10 @@ namespace DigiPhant
             { Status = "Select Camera, wait for live preview and calibrate before recording."; return; }
             controller.showControls = true;
             preview.showPreview = true;
-            tracking = Path.GetFullPath(Path.Combine(Application.dataPath, "../DigiPhantStarter/Tracking"));
+            tracking = Path.GetFullPath(Path.Combine(Application.dataPath, "../Tracking"));
             python = Path.Combine(tracking, Application.platform == RuntimePlatform.WindowsEditor ? ".venv/Scripts/python.exe" : ".venv/bin/python");
             if (!File.Exists(python) || !File.Exists(Path.Combine(tracking, "encode_recording.py")))
-            { Status = "Recording setup missing. Follow DigiPhantStarter/RECORDING.md."; return; }
+            { Status = "Recording setup missing. Run setup.sh in the repo folder (see DigiPhantStarter/RECORDING.md)."; return; }
             try
             {
                 session = Path.GetFullPath(Path.Combine(Application.dataPath, "../Recordings",

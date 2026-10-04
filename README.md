@@ -20,4 +20,4 @@ The controls are explained in `Paladin_Digiphant/Paladin_Digiphant/DigiPhantStar
 
 The elephant model is a third-party asset whose original license terms still apply, and this repo is public. So we don't republish the model here. `setup.sh` and `setup.ps1` fetch it from the instructor's starter at a fixed version (commit `5adcbea`), so everyone gets the same files. The `DigiPhantStarter/` folder and `Assets/Elephant/` are listed in `.gitignore`.
 
-Commit changes to our own work: `Assets/DigiPhant/`, `Assets/StudentWork/`, scenes, and settings. If you change `DigiPhantStarter/Tracking/bridge.py`, copy the changed file somewhere tracked as well, because Git ignores that folder.
+Commit changes to our own work: `Assets/DigiPhant/`, `Assets/StudentWork/`, scenes, settings, and the camera tracker in `Paladin_Digiphant/Paladin_Digiphant/Tracking/`. That folder is our own copy of the instructor's tracker, and Unity runs it from there. Edit `Tracking/bridge.py` there, not in `DigiPhantStarter/` (see `Tracking/README.md`).
