@@ -1,0 +1,14 @@
+# Changes to these paths need approval from @cassiusp-beep before merging into main.
+# Everything else (Assets, scenes, scripts) can be merged by any teammate.
+
+# Shared agent instructions
+/.claude/       @cassiusp-beep
+/CLAUDE.md      @cassiusp-beep
+
+# Setup and repo configuration
+/setup.sh       @cassiusp-beep
+/setup.ps1      @cassiusp-beep
+/.gitignore     @cassiusp-beep
+
+# This file
+/.github/       @cassiusp-beep
