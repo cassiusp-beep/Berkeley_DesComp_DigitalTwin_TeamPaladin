@@ -302,10 +302,10 @@ def main():
                     # Zone boundaries, so performers can see which band is theirs.
                     for z in range(1, args.people):
                         x = int(w * z / args.people)
-                        cv2.line(frame, (x, 0), (x, h - 1), (230, 230, 230), 1, cv2.LINE_AA)
+                        cv2.line(frame, (x, 0), (x, h - 1), (0, 0, 255), 1, cv2.LINE_AA)
                     for z in range(args.people):
                         cv2.putText(frame, f'P{z + 1} zone', (int(w * (z + .5) / args.people) - 40, h - 14),
-                                    cv2.FONT_HERSHEY_SIMPLEX, .6, (230, 230, 230), 2, cv2.LINE_AA)
+                                    cv2.FONT_HERSHEY_SIMPLEX, .6, (0, 0, 255), 2, cv2.LINE_AA)
                 # Draw every detection, even while waiting for the full group or
                 # rejecting an ambiguous identity. Only assigned bodies drive Unity.
                 slots = {id(observations[i][3]): slot for slot, i in assignments.items()}
