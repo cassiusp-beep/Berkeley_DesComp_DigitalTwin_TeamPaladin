@@ -1437,12 +1437,12 @@ MonoBehaviour:
     - performer: 2
       movement: 4
       weight: 1
-    sensitivity: 1
-    deadZone: 0.12
+    sensitivity: 3
+    deadZone: 0.05
   walkSpeed: 1.8
   runSpeed: 4.5
   backwardSpeed: 1.2
-  turnDegreesPerSecond: 60
+  turnDegreesPerSecond: 90
   runThreshold: 0.65
   animationBlendSeconds: 0.25
   inputSmoothing: 6
@@ -1479,24 +1479,27 @@ MonoBehaviour:
   navigator: 2
   actionPivot: {fileID: 186644802}
   rearPivot: {x: 0, y: 0.8, z: -1.2}
-  kneeLiftThreshold: 0.45
+  kneeLiftThreshold: 0.23
   jumpHeight: 1.2
   jumpSeconds: 0.7
   jumpForwardDistance: 2.5
   jumpCooldown: 1.2
-  tPoseSpreadMin: 0.8
-  tPoseHandMin: 0.6
+  tPoseSpreadMin: 0.2
+  tPoseHandMin: 0.48
   tPoseHandMax: 1.5
   tPoseHoldSeconds: 0.6
   turnSeconds: 1.4
   turnCooldown: 2
-  rearHandOn: 1.5
-  rearHandOff: 1.1
-  rearSpreadMax: 0.4
+  rearHandOn: 1.45
+  rearHandOff: 1.21
+  rearSpreadMax: 0.16
   rearHoldSeconds: 0.4
   rearDegrees: 35
   rearBlendSpeed: 4
   showSignals: 1
+  getReadySeconds: 5
+  holdSeconds: 6
+  includeSquatTake: 1
 --- !u!1 &626880299
 GameObject:
   m_ObjectHideFlags: 0

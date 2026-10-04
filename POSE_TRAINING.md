@@ -143,6 +143,32 @@ Tune these in the Inspector if needed:
 - **Rear Pivot**: where the elephant's rear hips are, in the pivot's own space. If the elephant swings around the wrong point when rearing, move it.
 - **Hold seconds**: hold longer if poses trigger too easily, shorter if they feel slow.
 
+## Our tuning record
+
+**Session 1, 4 Oct 2026.** All three of us were recorded with Guided recording, using the MacBook Pro's built-in webcam and zone tracking. All three were tracked through every take with no gaps.
+
+Measured from neutral (median of each take):
+
+| Pose | Signal | Measured | Notes |
+|---|---|---|---|
+| P2 T-pose | hand heights / arm spread | +0.94…+1.01 / **+0.41** | The spread was the same across runs, so it's how wide P2 reaches. The default threshold (0.8) would never have triggered |
+| P2 arms overhead | hand heights / arm spread | +2.0 / −0.10 | Very clear |
+| P1 knee lift | right foot lift | **+0.28…+0.33** | Below the default threshold (0.45); one run's take failed because the knee wasn't held |
+| P2 lean | lean | ±0.20 | The default steering turned only ~5°/s at this lean |
+| P3 squat | both foot lifts / right hand | +0.6…+0.7 / −0.83 | For the trunk actions (next) |
+
+Values saved in `DigiPhant_Student` (verified in the final run: T-pose → 180° about-turn, overhead → rear up, knee → jump, lean → turns up to 82°):
+
+| Component | Field | Default | Ours |
+|---|---|---|---|
+| Locomotion → Steering | Sensitivity / Dead Zone | 1 / 0.12 | **3 / 0.05** |
+| Locomotion | Turn Degrees Per Second | 60 | **90** |
+| Pose Actions | Knee Lift Threshold | 0.45 | **0.23** (thin margin, 0.11; re-record if the jump misfires) |
+| Pose Actions | T Pose Spread Min / Hand Min / Hand Max | 0.8 / 0.6 / 1.5 | **0.2 / 0.48 / 1.5** |
+| Pose Actions | Rear Hand On / Off / Spread Max | 1.5 / 1.1 / 0.4 | **1.45 / 1.21 / 0.16** |
+
+The raw takes are in `Paladin_Digiphant/Paladin_Digiphant/Recordings/` on the recording laptop. They aren't in Git; copy the ones you need for the write-up.
+
 ## Known gaps
 
 - **Grab (P3):** not built yet. The playbook's version needs a Gesture Recognizer in `Tracking/bridge.py`, a tracker change. The tracker now lives in this repo, so it can be edited directly. The fallback (hand at floor level for 1 s) can be built in Unity with no tracker change.
