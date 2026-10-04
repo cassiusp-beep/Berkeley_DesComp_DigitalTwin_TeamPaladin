@@ -243,22 +243,25 @@ namespace DigiPhant
         }
         public void DrawControls(float width)
         {
-            var label = new GUIStyle(GUI.skin.label) { wordWrap = true };
-            bool selected = GUILayout.Toggle(enableLocomotion, "Enable locomotion");
+            var note = DigiPhantUi.Text(DigiPhantUi.Small, DigiPhantUi.Muted);
+            GUILayout.BeginHorizontal();
+            bool selected = DigiPhantUi.Segmented(null, enableLocomotion ? 0 : 1, "Locomotion on", "Off") == 0;
+            GUILayout.EndHorizontal();
             if (selected != enableLocomotion) { enableLocomotion = selected; StopMotion(); }
             if (!enableLocomotion) return;
-            GUILayout.Label(CurrentAction + " | " + Mathf.Abs(CurrentSpeed).ToString("0.0") + " units/s", label, GUILayout.Width(width));
+            GUILayout.Label(CurrentAction + "  ·  " + Mathf.Abs(CurrentSpeed).ToString("0.0") + " units/s",
+                DigiPhantUi.Text(DigiPhantUi.Body, DigiPhantUi.Ink, FontStyle.Bold), GUILayout.Width(width));
             if (controller.inputMode == InputMode.TestSliders)
             {
-                GUILayout.Label("Travel: backward / stop / forward", label, GUILayout.Width(width));
+                GUILayout.Label("Travel  (back · stop · forward)", note, GUILayout.Width(width));
                 testForward = GUILayout.HorizontalSlider(testForward, -1, 1);
-                GUILayout.Label("Turn: left / straight / right", label, GUILayout.Width(width));
+                GUILayout.Label("Turn  (left · straight · right)", note, GUILayout.Width(width));
                 testSteering = GUILayout.HorizontalSlider(testSteering, -1, 1);
-                if (GUILayout.Button("Stop moving")) StopMotion();
             }
-            else GUILayout.Label("Speed and steering use the movement mappings in the Inspector.", label, GUILayout.Width(width));
-            if (GUILayout.Button("Return to starting position")) ResetPosition();
-            GUILayout.Space(8);
+            GUILayout.BeginHorizontal();
+            if (controller.inputMode == InputMode.TestSliders && GUILayout.Button("Stop moving")) StopMotion();
+            if (GUILayout.Button("Return to start")) ResetPosition();
+            GUILayout.EndHorizontal();
         }
     }
 }

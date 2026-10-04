@@ -158,14 +158,15 @@ namespace DigiPhant
         public void DrawInline(float width)
         {
             if (!showPreview) return;
-            GUILayout.Label("CAMERA PREVIEW");
-            float height = Mathf.Min(width * .75f, Screen.height * .25f);
+            // Match the camera's shape so there are no black bars (16:9 until the first frame arrives).
+            float aspect = texture != null && texture.width > 0 ? (float)texture.height / texture.width : .5625f;
+            float height = Mathf.Min(width * aspect, Screen.height * .3f);
             Rect picture = GUILayoutUtility.GetRect(width, height, GUILayout.ExpandWidth(true));
             GUI.DrawTexture(picture, Texture2D.blackTexture, ScaleMode.StretchToFill, false);
             if (HasLiveFrame) GUI.DrawTexture(picture, texture, ScaleMode.ScaleToFit);
             GUILayout.BeginHorizontal();
-            GUILayout.Label(Status, new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 11 });
-            if (GUILayout.Button("Retry", GUILayout.Width(54))) BeginPreview();
+            GUILayout.Label(Status, DigiPhantUi.Text(DigiPhantUi.Small, DigiPhantUi.Muted));
+            if (GUILayout.Button("Retry", GUILayout.Width(DigiPhantUi.Px(52)))) BeginPreview();
             GUILayout.EndHorizontal();
         }
         void OnGUI()
