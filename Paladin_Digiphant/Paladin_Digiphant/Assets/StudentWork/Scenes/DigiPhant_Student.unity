@@ -1459,7 +1459,8 @@ MonoBehaviour:
     deadZone: 0.05
   walkSpeed: 1.8
   runSpeed: 4.5
-  backwardSpeed: 1.2
+  backwardSpeed: 1.8
+  backwardSensitivity: 4
   turnDegreesPerSecond: 90
   runThreshold: 0.65
   animationBlendSeconds: 0.25

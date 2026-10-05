@@ -58,7 +58,7 @@ The method is the same for each: do the move, read that person's numbers in the 
 2. **Sensitivity** = 1 ÷ the overhead reading. For example, overhead 1.4 → 0.7, so full speed is at overhead.
 3. **Dead Zone:** how far the number wobbles while P1 holds still at the waist, × Sensitivity. For example, 0.15 × 0.7 ≈ 0.1. Raise it if the elephant creeps.
 4. **Run Threshold** (in Digi Phant Locomotion) ≈ the shoulder reading × Sensitivity. For example, 1.0 × 0.7 = 0.7: walk below the shoulder, run above it.
-5. **Backward:** a hand down by the thigh only reaches about −0.3 to −0.4, so reversing is slow. Raise **Backward Speed** if needed.
+5. **Backward:** a hand down by the thigh only reaches about −0.3 to −0.4. **Backward Sensitivity** (4) multiplies that so a thigh drop gives full reverse at **Backward Speed** (1.8, the same as walking). Lower the sensitivity if reverse starts too easily, raise it if P1 has to drop their hand too far.
 
 The jump threshold comes from the analyzer in step 6. P1's knee also lifts the elephant's front-right leg; that's the starter's own mapping, and it's intended.
 
