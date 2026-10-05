@@ -52,6 +52,8 @@ namespace DigiPhant
         [Min(.01f)] public float walkSpeed = 1.8f;
         [Min(.01f)] public float runSpeed = 4.5f;
         [Min(.01f)] public float backwardSpeed = 1.2f;
+        [Tooltip("Multiplies camera input below neutral. A hand can drop much less than it can rise, so raise this to reach full reverse with a small drop.")]
+        [Range(1, 8)] public float backwardSensitivity = 1;
         [Min(0)] public float turnDegreesPerSecond = 60;
         [Range(.2f, .95f)] public float runThreshold = .65f;
         [Min(.01f)] public float animationBlendSeconds = .25f;
@@ -157,6 +159,7 @@ namespace DigiPhant
             if (controller.inputMode == InputMode.Camera)
             {
                 bool moving = forward.TryRead(controller, now, out desiredForward);
+                if (desiredForward < 0) desiredForward *= backwardSensitivity;
                 bool turning = steering.TryRead(controller, now, out desiredTurn);
                 valid = moving && turning;
             }
