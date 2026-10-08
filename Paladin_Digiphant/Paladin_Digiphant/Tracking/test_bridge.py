@@ -1,6 +1,7 @@
 import unittest
 from types import SimpleNamespace
-from bridge import PerformerTracker, ZoneTracker, body_size, extract_features, make_tracker, requested_count
+from bridge import (PerformerTracker, ZoneTracker, body_size, extract_features, gesture_packet, hand_owner,
+                    make_tracker, requested_count)
 
 
 class TrackingTests(unittest.TestCase):
@@ -137,3 +138,23 @@ class ZoneTrackingTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class GestureTests(unittest.TestCase):
+    def test_hand_goes_to_nearest_performer_wrist(self):
+        wrists = {1: [(.20, .50), (.30, .50)], 2: [(.70, .50), (.80, .50)]}
+        self.assertEqual(hand_owner((.31, .52), wrists), 1)
+        self.assertEqual(hand_owner((.69, .48), wrists), 2)
+        self.assertEqual(hand_owner((.50, .10), wrists), 0)  # nobody's wrist is close
+        self.assertEqual(hand_owner((.50, .50), {}), 0)
+
+    def test_packet_keeps_top_gesture_per_hand(self):
+        def point(x, y):
+            return SimpleNamespace(x=x, y=y)
+        result = SimpleNamespace(
+            gestures=[[SimpleNamespace(category_name='Victory', score=.91)],
+                      [SimpleNamespace(category_name='Open_Palm', score=.8)], []],
+            hand_landmarks=[[point(.3, .5)], [point(.9, .1)], [point(.5, .5)]])
+        packet = gesture_packet(result, {1: [(.3, .5)]})
+        self.assertEqual(packet['version'], 1)
+        self.assertEqual([(h['slot'], h['gesture']) for h in packet['hands']], [(1, 'Victory'), (0, 'Open_Palm')])

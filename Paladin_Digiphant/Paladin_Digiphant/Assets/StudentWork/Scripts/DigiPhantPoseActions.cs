@@ -325,7 +325,9 @@ namespace DigiPhant
             float bw(string s) => button.CalcSize(new GUIContent(s)).x + Px(8);
             float gap = Px(8);
             float w = pad + textWidth + bw(guideText) + bw(logText) + bw(numbersText) + 3 * gap + pad;
-            var bar = new Rect(Screen.width - w - Px(12), Px(12), w, h);
+            // Right-aligned, but never over the left control panel.
+            float left = controller.showControls ? DigiPhantUi.PanelWidth + Px(12) : Px(12);
+            var bar = new Rect(Mathf.Max(left, Screen.width - w - Px(12)), Px(12), w, h);
             Panel(bar);
 
             float x = bar.x + pad;

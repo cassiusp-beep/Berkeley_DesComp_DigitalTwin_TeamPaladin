@@ -62,6 +62,9 @@ namespace DigiPhant
         [Min(0)] public float stageRadius = 15;
         [Range(-1, 1)] public float testForward;
         [Range(-1, 1)] public float testSteering;
+        // Set by action scripts (e.g. gesture circles) to drive travel and turning instead of the performers.
+        [NonSerialized] public bool scriptedInput;
+        [NonSerialized] public float scriptedForward, scriptedSteering;
         public string CurrentAction { get; private set; } = "Idle";
         public float CurrentSpeed { get; private set; }
         public bool AnimationActive => graph.IsValid();
@@ -156,7 +159,8 @@ namespace DigiPhant
             dt = Mathf.Clamp(dt, 0, .1f);
             float desiredForward = testForward, desiredTurn = testSteering;
             bool valid = true;
-            if (controller.inputMode == InputMode.Camera)
+            if (scriptedInput) { desiredForward = scriptedForward; desiredTurn = scriptedSteering; }
+            else if (controller.inputMode == InputMode.Camera)
             {
                 bool moving = forward.TryRead(controller, now, out desiredForward);
                 if (desiredForward < 0) desiredForward *= backwardSensitivity;

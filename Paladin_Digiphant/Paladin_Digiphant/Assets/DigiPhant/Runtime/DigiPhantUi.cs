@@ -20,9 +20,19 @@ namespace DigiPhant
         // Controls are 24 pt tall (48 px on Retina): above the WCAG 2.2 minimum target size.
         public const float ControlHeight = 24;
 
-        // 0 = automatic (2x on high-density screens such as Retina, otherwise 1x). Set a value to force a scale.
+        // 0 = automatic (2x on high-density screens such as Retina, otherwise 1x), shrunk in quarter steps
+        // so the 300 pt panel, the status bar and the gesture panel fit a small Game view. Set a value to force a scale.
         public static float ScaleOverride;
-        public static float Scale => ScaleOverride > 0 ? ScaleOverride : Screen.dpi >= 150 ? 2f : 1f;
+        public static float Scale => ScaleOverride > 0 ? ScaleOverride : AutoScale;
+        static float AutoScale
+        {
+            get
+            {
+                float density = Screen.dpi >= 150 ? 2f : 1f;
+                float fit = Mathf.Min(Screen.width / 1050f, Screen.height / 620f);
+                return Mathf.Max(.75f, Mathf.Floor(Mathf.Min(density, fit) * 4) / 4);
+            }
+        }
         public static float Px(float points) => Mathf.Round(points * Scale);
         static int Pxi(float points) => Mathf.RoundToInt(points * Scale);
 

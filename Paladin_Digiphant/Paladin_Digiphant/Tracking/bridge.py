@@ -1,5 +1,6 @@
 """DigiPhant camera -> local Unity UDP bridge. Run with --help for setup options."""
 import argparse
+import contextlib
 import errno
 import itertools
 import json
@@ -10,6 +11,8 @@ import time
 
 FEATURES = ('LeftHandHeight', 'RightHandHeight', 'LeftFootLift', 'RightFootLift', 'Lean', 'ArmSpread')
 MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task'
+GESTURE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task'
+# Google's canned gestures: None, Closed_Fist, Open_Palm, Pointing_Up, Thumb_Down, Thumb_Up, Victory, ILoveYou.
 
 
 def extract_features(landmarks, upper_body_only=False):
@@ -183,6 +186,30 @@ def requested_count(data):
     return None
 
 
+def hand_owner(wrist, performer_wrists, max_distance=.15):
+    """Performer slot whose pose wrist (landmark 15 or 16) is nearest this hand's wrist, or 0 if none is close."""
+    best, best_distance = 0, max_distance
+    for slot, wrists in performer_wrists.items():
+        for w in wrists:
+            d = math.dist(wrist, w)
+            if d < best_distance:
+                best, best_distance = slot, d
+    return best
+
+
+def gesture_packet(result, performer_wrists):
+    """Top gesture per detected hand, tagged with the performer it belongs to (slot 0 = unassigned)."""
+    hands = []
+    for categories, landmarks in zip(result.gestures, result.hand_landmarks):
+        if not categories or not landmarks:
+            continue
+        top = categories[0]
+        wrist = (landmarks[0].x, landmarks[0].y)
+        hands.append(dict(slot=hand_owner(wrist, performer_wrists), gesture=top.category_name,
+                          score=round(float(top.score), 3), x=round(wrist[0], 3), y=round(wrist[1], 3)))
+    return {'version': 1, 'hands': hands}
+
+
 def encode_preview(frame, cv2):
     """Fit one low-latency JPEG into a local UDP datagram, preserving aspect ratio."""
     height, width = frame.shape[:2]
@@ -211,9 +238,11 @@ def main():
                         help='zones: P1..PN by left-to-right image bands (fixed formation); track: follow movement (starter default)')
     parser.add_argument('--model', type=Path, default=Path(__file__).parent / 'pose_landmarker_full.task')
     parser.add_argument('--download-model', action='store_true', help='Download the official model if missing')
+    parser.add_argument('--gesture-model', type=Path, default=Path(__file__).parent / 'gesture_recognizer.task')
+    parser.add_argument('--no-gestures', action='store_true', help='Skip the hand gesture recognizer (sent to --port + 3)')
     args = parser.parse_args()
-    if not 1024 <= args.port <= 65533:
-        parser.error('--port must be between 1024 and 65533')
+    if not 1024 <= args.port <= 65532:
+        parser.error('--port must be between 1024 and 65532')
     if not args.model.exists():
         if not args.download_model:
             parser.error('Model missing. Run again with --download-model (internet required).')
@@ -223,6 +252,17 @@ def main():
         print('Downloading the official MediaPipe pose model...')
         urllib.request.urlretrieve(MODEL_URL, temporary)
         temporary.replace(args.model)
+    if not args.no_gestures and not args.gesture_model.exists():
+        if args.download_model:
+            import urllib.request
+            temporary = args.gesture_model.with_suffix('.download')
+            print('Downloading the official MediaPipe gesture model...')
+            urllib.request.urlretrieve(GESTURE_MODEL_URL, temporary)
+            temporary.replace(args.gesture_model)
+        else:
+            # Gestures are an extra: pose tracking still runs without them.
+            print('Gesture model missing; hand gestures off. Run again with --download-model to fetch it.')
+            args.no_gestures = True
     import cv2
     import mediapipe as mp
     from mediapipe.tasks import python
@@ -233,6 +273,11 @@ def main():
         running_mode=vision.RunningMode.VIDEO, num_poses=4,
         min_pose_detection_confidence=.5, min_pose_presence_confidence=.5,
         min_tracking_confidence=.5)
+    # Separate from the pose model above, which is unchanged. Two hands per possible performer.
+    gesture_options = None if args.no_gestures else vision.GestureRecognizerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(args.gesture_model)),
+        running_mode=vision.RunningMode.VIDEO, num_hands=8,
+        min_hand_detection_confidence=.5, min_hand_presence_confidence=.5, min_tracking_confidence=.5)
     tracker = make_tracker(args.people, args.assign)
     camera = cv2.VideoCapture(args.camera)
     if not camera.isOpened():
@@ -255,7 +300,9 @@ def main():
     print('Stand side by side, all visible. IDs start left-to-right in the unmirrored preview.')
     print('R: reset identities (then recalibrate in Unity). Q: quit.')
     try:
-        with vision.PoseLandmarker.create_from_options(options) as detector:
+        with vision.PoseLandmarker.create_from_options(options) as detector, \
+                (vision.GestureRecognizer.create_from_options(gesture_options) if gesture_options
+                 else contextlib.nullcontext()) as recognizer:
             while True:
                 for _ in range(32):
                     try:
@@ -286,7 +333,8 @@ def main():
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 timestamp = max(previous_timestamp + 1, time.monotonic_ns() // 1_000_000)
                 previous_timestamp = timestamp
-                result = detector.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), timestamp)
+                image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                result = detector.detect_for_video(image, timestamp)
                 observations = []
                 for landmarks in result.pose_landmarks:
                     center, values, confidence = extract_features(landmarks, args.upper_body_only)
@@ -297,6 +345,16 @@ def main():
                 packet = {'version': 1, 'performerCount': args.people, 'upperBodyOnly': args.upper_body_only, 'people': [dict(slot=slot, values=observations[i][1], confidence=observations[i][2])
                                                  for slot, i in assignments.items()]}
                 sender.sendto(json.dumps(packet, allow_nan=False).encode(), ('127.0.0.1', args.port))
+                gestures = None
+                if recognizer is not None:
+                    hand_result = recognizer.recognize_for_video(image, timestamp)
+                    wrists = {slot: [(observations[i][3][k].x, observations[i][3][k].y) for k in (15, 16)]
+                              for slot, i in assignments.items()}
+                    gestures = gesture_packet(hand_result, wrists)
+                    try:
+                        sender.sendto(json.dumps(gestures, allow_nan=False).encode(), ('127.0.0.1', args.port + 3))
+                    except OSError:
+                        pass  # a dropped gesture packet must not stop pose tracking
                 h, w = frame.shape[:2]
                 if args.assign == 'zones' and args.people > 1:
                     # Zone boundaries, so performers can see which band is theirs. Sized like the
@@ -341,6 +399,18 @@ def main():
                                     (20, 20, 20), thickness + 2, cv2.LINE_AA)
                         cv2.putText(frame, label, anchor, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
                                     color, thickness, cv2.LINE_AA)
+                if gestures is not None:
+                    # Gesture name beside each hand, in its performer's colour (grey if unassigned).
+                    font_scale = max(.6, thickness * .3)
+                    for hand in gestures['hands']:
+                        if hand['gesture'] in ('', 'None'):
+                            continue
+                        color = colors[hand['slot'] - 1] if hand['slot'] else (180, 180, 180)
+                        at = (min(w - 1, max(0, int(hand['x'] * w))), min(h - 1, max(0, int(hand['y'] * h))))
+                        cv2.putText(frame, hand['gesture'], at, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                                    (20, 20, 20), thickness + 2, cv2.LINE_AA)
+                        cv2.putText(frame, hand['gesture'], at, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                                    color, thickness, cv2.LINE_AA)
                 message = f'{len(assignments)}/{args.people} assigned' if args.no_window else f'{len(assignments)}/{args.people} assigned | R: reassign | Q: quit'
                 if tracker.positions is None:
                     message = f'Waiting for {args.people} visible people' if args.no_window else f'Stand side by side: waiting for {args.people} visible people | Q: quit'
@@ -367,6 +437,7 @@ def main():
                     tracker.reset()
     finally:
         sender.sendto(b'{"version":1,"people":[]}', ('127.0.0.1', args.port))
+        sender.sendto(b'{"version":1,"hands":[]}', ('127.0.0.1', args.port + 3))
         sender.close()
         camera.release()
         cv2.destroyAllWindows()
