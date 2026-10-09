@@ -118,18 +118,22 @@ class ZoneTracker:
         self.min_ratio, self.max_ratio = min_ratio, max_ratio
         self.tie = tie
         self.size_blend = size_blend
-        self.positions = None
-        self.sizes = None
+        self.reset()
 
     def reset(self):
         self.positions = None
         self.sizes = None
+        # Why the performers are (not) driving, for the preview: tracking fails silently otherwise.
+        self.status = f'Waiting: one person in each of the {self.count} zones'
 
     def zone(self, x):
         return min(self.count - 1, max(0, int(x * self.count)))
 
     def _fits(self, size, reference):
         return reference > 0 and self.min_ratio * reference <= size <= self.max_ratio * reference
+
+    def _size_problem(self, size, reference):
+        return 'too close to camera' if size > self.max_ratio * reference else 'too far from camera'
 
     def assign(self, centers, sizes=None):
         if sizes is None:
@@ -139,33 +143,48 @@ class ZoneTracker:
             by_zone[self.zone(c[0])].append(i)
 
         if self.positions is None:
-            if any(not by_zone[z] for z in range(self.count)):
+            empty = [f'P{z + 1}' for z in range(self.count) if not by_zone[z]]
+            if empty:
+                self.status = f"Waiting: nobody in {', '.join(empty)} zone{'s' if len(empty) > 1 else ''}"
                 return {}
             # Lower median: performers stand far back, so a close-up extra (the clicker) is the large outlier.
             median = sorted(sizes)[(len(sizes) - 1) // 2]
-            chosen = {}
+            chosen, misfits = {}, []
             for z in range(self.count):
                 fits = [i for i in by_zone[z] if self._fits(sizes[i], median)]
-                if not fits:
-                    return {}
-                chosen[z + 1] = min(fits, key=lambda i: abs(sizes[i] - median))
+                if fits:
+                    chosen[z + 1] = min(fits, key=lambda i: abs(sizes[i] - median))
+                else:
+                    nearest = min(by_zone[z], key=lambda i: abs(sizes[i] - median))
+                    misfits.append(f'P{z + 1} {self._size_problem(sizes[nearest], median)}')
+            if misfits:
+                self.status = 'Waiting: ' + ', '.join(misfits)
+                return {}
             self.positions = [centers[chosen[s]] for s in range(1, self.count + 1)]
             self.sizes = [sizes[chosen[s]] for s in range(1, self.count + 1)]
+            self.status = 'Tracking ' + ' '.join(f'P{s}' for s in chosen)
             return chosen
 
-        result = {}
+        result, missing = {}, []
         for z in range(self.count):
             fits = [i for i in by_zone[z] if self._fits(sizes[i], self.sizes[z])]
             if not fits:
+                if by_zone[z]:
+                    nearest = min(by_zone[z], key=lambda i: abs(sizes[i] - self.sizes[z]))
+                    missing.append(f'P{z + 1}: {self._size_problem(sizes[nearest], self.sizes[z])}')
+                else:
+                    missing.append(f'P{z + 1}: nobody in zone')
                 continue
             ranked = sorted(fits, key=lambda i: math.dist(centers[i], self.positions[z]))
             if len(ranked) > 1 and (math.dist(centers[ranked[1]], self.positions[z])
                                     - math.dist(centers[ranked[0]], self.positions[z])) < self.tie:
+                missing.append(f'P{z + 1}: two people in zone')
                 continue  # two similar people in one zone: skip rather than guess
             i = ranked[0]
             result[z + 1] = i
             self.positions[z] = centers[i]
             self.sizes[z] += (sizes[i] - self.sizes[z]) * self.size_blend
+        self.status = ' | '.join([('Tracking ' + ' '.join(f'P{s}' for s in result)) if result else 'Tracking nobody'] + missing)
         return result
 
 
@@ -208,6 +227,22 @@ def gesture_packet(result, performer_wrists):
         hands.append(dict(slot=hand_owner(wrist, performer_wrists), gesture=top.category_name,
                           score=round(float(top.score), 3), x=round(wrist[0], 3), y=round(wrist[1], 3)))
     return {'version': 1, 'hands': hands}
+
+
+def draw_status(frame, lines, thickness, cv2):
+    """Top-left status lines, outlined and scaled like the skeleton labels so they stay legible in Unity's small preview."""
+    margin = thickness * 4
+    room = frame.shape[1] - 2 * margin
+    y = 0
+    for line in lines:
+        font_scale = max(.6, thickness * .3)
+        text_w = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0][0]
+        if text_w > room:
+            font_scale *= room / text_w  # shrink a long line rather than cut it off at the edge
+        (_, text_h), baseline = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+        y += text_h + baseline + thickness * 2
+        cv2.putText(frame, line, (margin, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (20, 20, 20), thickness + 3, cv2.LINE_AA)
+        cv2.putText(frame, line, (margin, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
 
 def encode_preview(frame, cv2):
@@ -411,12 +446,18 @@ def main():
                                     (20, 20, 20), thickness + 2, cv2.LINE_AA)
                         cv2.putText(frame, hand['gesture'], at, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
                                     color, thickness, cv2.LINE_AA)
-                message = f'{len(assignments)}/{args.people} assigned' if args.no_window else f'{len(assignments)}/{args.people} assigned | R: reassign | Q: quit'
+                lines = [f'{len(assignments)}/{args.people} assigned']
                 if tracker.positions is None:
-                    message = f'Waiting for {args.people} visible people' if args.no_window else f'Stand side by side: waiting for {args.people} visible people | Q: quit'
-                    if args.assign == 'zones':
-                        message = f'Waiting: one person in each of the {args.people} zones'
-                cv2.putText(frame, message, (12, 26), cv2.FONT_HERSHEY_SIMPLEX, .55, (255, 255, 255), 2)
+                    lines = [f'Waiting for {args.people} visible people']
+                if hasattr(tracker, 'status'):
+                    lines = tracker.status.split(' | ')
+                ignored = len(result.pose_landmarks) - len(observations)
+                if ignored:
+                    part = 'shoulders' if args.upper_body_only else 'shoulders + hips'
+                    lines.append(f"{ignored} {'person' if ignored == 1 else 'people'} ignored: show {part}")
+                if not args.no_window:
+                    lines.append('R: reassign | Q: quit')
+                draw_status(frame, lines, thickness, cv2)
                 now = time.monotonic()
                 if now - last_preview >= .1:
                     jpeg = encode_preview(frame, cv2)
