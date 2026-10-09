@@ -136,12 +136,13 @@ namespace DigiPhant
 
         // Inspector ⋮ menu helpers for testing without the camera.
         [ContextMenu("Test: pick up or drop")]
-        void TestToggle() { if (Carrying) Drop(); else PickUp(); }
+        public void TestToggle() { if (Carrying) Drop(); else PickUp(); }
 
         [ContextMenu("Reset prop to its start")]
-        void ResetProp()
+        public void ResetProp()
         {
             Carrying = false;
+            reaching = waitForStand = false; squatSince = -1;
             if (carryProp) carryProp.SetPositionAndRotation(propStartPosition, propStartRotation);
         }
 

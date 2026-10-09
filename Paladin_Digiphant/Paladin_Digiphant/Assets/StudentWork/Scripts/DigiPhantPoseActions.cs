@@ -131,6 +131,16 @@ namespace DigiPhant
             else tPoseSince = -1;
         }
 
+        // Inspector ⋮ menu / on-screen test button: the same jump the driver's knee lift starts, without the camera.
+        [ContextMenu("Test: jump")]
+        public void TestJump()
+        {
+            float t = Time.time;
+            if (t - jumpStart <= jumpSeconds) return;
+            jumpStart = lastJump = t;
+            jumpForward = locomotion != null && locomotion.CurrentSpeed > .1f;
+        }
+
         void ApplyTurn(float t, bool turning)
         {
             if (!turning || locomotion == null || locomotion.travelRoot == null) return;
