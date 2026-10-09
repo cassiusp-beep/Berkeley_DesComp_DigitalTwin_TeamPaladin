@@ -121,6 +121,35 @@ class ZoneTrackingTests(unittest.TestCase):
         self.assertEqual(t.assign([(.5, .9), (.45, .6)], [.5, self.PERFORMER]), {1: 1})
         self.assertEqual(t.assign([(.5, .9), (.46, .6)], [.5, self.PERFORMER]), {1: 1})
 
+    # The status line says why nobody is driving yet, so a silent "no response" can be read off the preview.
+    def test_status_names_the_empty_zones_before_lock(self):
+        t = ZoneTracker(3)
+        self.assertEqual(t.status, 'Waiting: one person in each of the 3 zones')
+        t.assign([(.15, .6), (.5, .6)], [self.PERFORMER] * 2)
+        self.assertEqual(t.status, 'Waiting: nobody in P3 zone')
+        t.assign([(.15, .6)], [self.PERFORMER])
+        self.assertEqual(t.status, 'Waiting: nobody in P2, P3 zones')
+
+    def test_status_names_who_is_too_close_or_far_before_lock(self):
+        t = ZoneTracker(3)
+        t.assign([(.15, .6), (.5, .6), (.85, .6)], [self.PERFORMER, .3, self.PERFORMER])
+        self.assertEqual(t.status, 'Waiting: P2 too close to camera')
+        t.assign([(.15, .6), (.5, .6), (.85, .6)], [self.PERFORMER, self.PERFORMER, .05])
+        self.assertEqual(t.status, 'Waiting: P3 too far from camera')
+
+    def test_status_after_lock_reports_each_missing_performer(self):
+        t = ZoneTracker(3)
+        t.assign([(.15, .6), (.5, .6), (.85, .6)], [self.PERFORMER] * 3)
+        self.assertEqual(t.status, 'Tracking P1 P2 P3')
+        t.assign([(.15, .6), (.85, .6)], [self.PERFORMER] * 2)
+        self.assertEqual(t.status, 'Tracking P1 P3 | P2: nobody in zone')
+        t.assign([(.15, .6), (.5, .6), (.85, .6)], [self.PERFORMER, .4, self.PERFORMER])
+        self.assertEqual(t.status, 'Tracking P1 P3 | P2: too close to camera')
+        t.assign([(.15, .6), (.45, .6), (.55, .6), (.85, .6)], [self.PERFORMER] * 4)
+        self.assertEqual(t.status, 'Tracking P1 P3 | P2: two people in zone')
+        t.reset()
+        self.assertEqual(t.status, 'Waiting: one person in each of the 3 zones')
+
     def test_four_people_and_mode_switch(self):
         t = make_tracker(4, 'zones')
         self.assertIsInstance(t, ZoneTracker)
