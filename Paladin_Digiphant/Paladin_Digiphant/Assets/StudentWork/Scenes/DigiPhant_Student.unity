@@ -4677,7 +4677,7 @@ MonoBehaviour:
     sources:
     - performer: 2
       movement: 4
-      weight: 1
+      weight: -1
     sensitivity: 3
     deadZone: 0.05
   walkSpeed: 1.8
@@ -4688,7 +4688,7 @@ MonoBehaviour:
   runThreshold: 0.65
   animationBlendSeconds: 0.25
   inputSmoothing: 6
-  stageRadius: 15
+  stageRadius: 30
   testForward: 0
   testSteering: 0
 --- !u!114 &557435878
