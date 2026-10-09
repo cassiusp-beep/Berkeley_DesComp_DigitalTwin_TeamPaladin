@@ -4679,13 +4679,13 @@ MonoBehaviour:
       movement: 4
       weight: -1
     sensitivity: 3
-    deadZone: 0.05
+    deadZone: 0.18
   walkSpeed: 1.8
   runSpeed: 4.5
   backwardSpeed: 1.8
   backwardSensitivity: 4
   turnDegreesPerSecond: 90
-  runThreshold: 0.65
+  runThreshold: 0.95
   animationBlendSeconds: 0.25
   inputSmoothing: 6
   stageRadius: 30
