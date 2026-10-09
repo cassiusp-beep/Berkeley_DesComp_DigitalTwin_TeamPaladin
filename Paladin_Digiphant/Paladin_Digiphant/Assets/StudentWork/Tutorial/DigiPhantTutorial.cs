@@ -92,7 +92,9 @@ namespace DigiPhant
             }
             Func<float, float, Fig> To(Fig target) => (s, u) => Fig.Lerp(rest, target, s);
 
-            Add("Start here", role == 1 ? "Left hand at your waist" : role == 2 ? "Arms down by your sides" : "Right hand at your waist", (s, u) => rest);
+            // Seated, hands in the lap drop out of frame and the neutral pose silently fails to save.
+            Add("Start here", seated ? "Both hands on the desk, in view"
+                : role == 1 ? "Left hand at your waist" : role == 2 ? "Arms down by your sides" : "Right hand at your waist", (s, u) => rest);
             if (role == 1)
             {
                 Add("Walk", "Left hand up from waist to chest", To(L(rest, 20, -155)), ArmL, 0, 3f, V(.27f, .6f), V(.27f, .8f));
