@@ -24,6 +24,8 @@ namespace DigiPhant
 
         [Header("Jump (driver knee lift)")]
         public float kneeLiftThreshold = .45f;
+        [Tooltip("Seated mode reads the right HAND as the knee. Hands jitter far more than knees, so jumping needs a real raise (about chest height).")]
+        public float seatedKneeLiftThreshold = 1f;
         public float jumpHeight = 1.2f, jumpSeconds = .7f, jumpForwardDistance = 2.5f, jumpCooldown = 1.2f;
 
         [Header("About-turn (navigator T-pose)")]
@@ -100,14 +102,19 @@ namespace DigiPhant
         void DetectPoses(float now, float t)
         {
             // Jump: rising edge of the driver's right knee, only from the ground and not while rearing.
+            // A frame where the knee isn't tracked is unknown, not "down": treating it as down turned every
+            // tracking flicker into a fresh lift (false jumps, signals_20261008_175503.csv), so keep the last state.
             float knee = Read(driver, Movement.RightFootLift, now);
-            bool kneeUp = !float.IsNaN(knee) && knee > kneeLiftThreshold;
-            if (kneeUp && !kneeWasUp && !rearing && t - lastJump > jumpCooldown && t - jumpStart > jumpSeconds)
+            if (!float.IsNaN(knee))
             {
-                jumpStart = lastJump = t;
-                jumpForward = locomotion != null && locomotion.CurrentSpeed > .1f;
+                bool kneeUp = knee > (controller.upperBodyOnly ? seatedKneeLiftThreshold : kneeLiftThreshold);
+                if (kneeUp && !kneeWasUp && !rearing && t - lastJump > jumpCooldown && t - jumpStart > jumpSeconds)
+                {
+                    jumpStart = lastJump = t;
+                    jumpForward = locomotion != null && locomotion.CurrentSpeed > .1f;
+                }
+                kneeWasUp = kneeUp;
             }
-            kneeWasUp = kneeUp;
 
             float left = Read(navigator, Movement.LeftHandHeight, now);
             float right = Read(navigator, Movement.RightHandHeight, now);
