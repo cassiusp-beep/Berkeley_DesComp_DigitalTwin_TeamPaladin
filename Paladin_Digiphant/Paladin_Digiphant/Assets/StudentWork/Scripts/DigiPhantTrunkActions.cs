@@ -37,6 +37,24 @@ namespace DigiPhant
         public Vector3 carryOffset = new Vector3(0, -.15f, 0);
 
         public bool showStatus = true;
+        [System.NonSerialized] public bool handGesturesOnly;
+
+        public void AssignProp(Transform prop)
+        {
+            Carrying = false;
+            carryProp = prop;
+            if (!prop) return;
+            propStartPosition = prop.position; propStartRotation = prop.rotation;
+            propRestHeight = prop.position.y - GroundHeight();
+        }
+
+        public bool TryToggleGrab()
+        {
+            if (!SlowEnough()) return false;
+            if (Carrying) { Drop(); return true; }
+            if (!PropInRange()) return false;
+            PickUp(); return Carrying;
+        }
 
         public string CurrentTrunkAction { get; private set; } = "None";
         public bool Carrying { get; private set; }
@@ -69,7 +87,7 @@ namespace DigiPhant
         void LateUpdate()
         {
             float now = Time.realtimeSinceStartup, t = Time.time;
-            if (controller.inputMode == InputMode.Camera && controller.IsCalibrated) Detect(now, t);
+            if (!handGesturesOnly && controller.inputMode == InputMode.Camera && controller.IsCalibrated) Detect(now, t);
             else { reaching = waitForStand = false; squatSince = -1; }
 
             if (Carrying && carryProp && trunkTip) carryProp.position = trunkTip.position + carryOffset;

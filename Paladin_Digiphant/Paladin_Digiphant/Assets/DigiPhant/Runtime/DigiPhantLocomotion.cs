@@ -41,6 +41,9 @@ namespace DigiPhant
     public class DigiPhantLocomotion : MonoBehaviour
     {
         public bool enableLocomotion = true;
+        [NonSerialized] public bool movementSuspended;
+        [NonSerialized] public bool handSteering;
+        [NonSerialized] public float handSteeringValue;
         public Transform travelRoot;
         public Animator elephantAnimator;
         public Transform animationMotionRoot;
@@ -154,6 +157,7 @@ namespace DigiPhant
         }
         public bool Evaluate(float now, float dt)
         {
+            if (movementSuspended) { StopMotion(); return false; }
             if (!enableLocomotion) { StopAnimation(); return false; }
             if (!StartAnimation()) return false;
             dt = Mathf.Clamp(dt, 0, .1f);
@@ -164,7 +168,8 @@ namespace DigiPhant
             {
                 bool moving = forward.TryRead(controller, now, out desiredForward);
                 if (desiredForward < 0) desiredForward *= backwardSensitivity;
-                bool turning = steering.TryRead(controller, now, out desiredTurn);
+                bool turning = handSteering || steering.TryRead(controller, now, out desiredTurn);
+                if (handSteering) desiredTurn = handSteeringValue;
                 valid = moving && turning;
             }
             if (!valid) { throttle = turn = 0; }

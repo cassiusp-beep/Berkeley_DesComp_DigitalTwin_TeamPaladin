@@ -51,6 +51,17 @@ namespace DigiPhant
         [Tooltip("Add a sixth take: the trunk performer squats with the right hand low.")]
         public bool includeSquatTake = true;
 
+        [System.NonSerialized] public bool movementSuspended;
+        public float JumpHeightNow => Time.time - jumpStart < jumpSeconds
+            ? 4 * jumpHeight * Mathf.Clamp01((Time.time - jumpStart) / jumpSeconds) * (1 - Mathf.Clamp01((Time.time - jumpStart) / jumpSeconds)) : 0;
+
+        public void ResetGameMotion()
+        {
+            jumpStart = turnStart = -99; rearAmount = 0; rearing = false;
+            UnlockMovement();
+            if (actionPivot) actionPivot.SetLocalPositionAndRotation(pivotBasePosition, pivotBaseRotation);
+        }
+
         public string CurrentPoseAction { get; private set; } = "None";
 
         DigiPhantController controller;
@@ -84,7 +95,7 @@ namespace DigiPhant
         void LateUpdate()
         {
             float now = Time.realtimeSinceStartup, t = Time.time;
-            bool live = controller.inputMode == InputMode.Camera && controller.IsCalibrated;
+            bool live = !movementSuspended && controller.inputMode == InputMode.Camera && controller.IsCalibrated;
 
             if (live) DetectPoses(now, t);
             else { tPoseSince = rearSince = -1; rearing = false; }
@@ -143,6 +154,7 @@ namespace DigiPhant
         public void TestJump()
         {
             float t = Time.time;
+            if (movementSuspended) return;
             if (t - jumpStart <= jumpSeconds) return;
             jumpStart = lastJump = t;
             jumpForward = locomotion != null && locomotion.CurrentSpeed > .1f;
@@ -442,7 +454,11 @@ namespace DigiPhant
 
             float w = Screen.width * .7f, h = Screen.height * .62f;
             var box = new Rect((Screen.width - w) / 2, (Screen.height - h) / 2, w, h);
+            // Tint only the backdrop; keep instructions and buttons fully opaque.
+            var backdrop = GUI.color;
+            GUI.color = new Color(1, 1, 1, .48f);
             Panel(box, Px(1.5f));
+            GUI.color = backdrop;
             float unit = Mathf.Max(9, Screen.height / 28f / DigiPhantUi.Scale), u = Px(unit);
             float y = box.y + u;
             GUI.Label(new Rect(box.x, y, w, u * 1.4f), step, Text(unit, Muted, FontStyle.Bold, TextAnchor.MiddleCenter)); y += u * 1.6f;

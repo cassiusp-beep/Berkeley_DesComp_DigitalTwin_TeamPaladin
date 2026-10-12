@@ -38,6 +38,9 @@ namespace DigiPhant
         [Tooltip("Passed markers rise and missed markers sink by this much (a cue besides colour).")]
         public float markerShift = .3f;
 
+        [System.NonSerialized] public bool adventureManagedJump;
+        public void ResolveAdventureJump(bool cleared) => Set(cleared ? CheckpointState.Passed : CheckpointState.Missed);
+
         public CheckpointState State { get; private set; }
 
         Transform elephant;
@@ -137,7 +140,7 @@ namespace DigiPhant
 
         void LateUpdate()
         {
-            if (!FindElephant()) return;
+            if (adventureManagedJump || !FindElephant()) return;
             Vector3 p = transform.InverseTransformPoint(elephant.position);
             float hw = zoneSize.x / 2, hd = zoneSize.y / 2;
             bool box = Mathf.Abs(p.x) <= hw && Mathf.Abs(p.z) <= hd;
