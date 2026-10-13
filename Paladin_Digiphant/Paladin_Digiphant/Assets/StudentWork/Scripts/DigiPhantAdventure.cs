@@ -288,6 +288,7 @@ namespace DigiPhant
             controller.SetPerformerCount(count);
             pose.driver = 1; pose.navigator = Mathf.Min(2, count);
             trunk.trunkPerformer = Mathf.Min(3, count);
+            pose.trunkPerformerOverride = trunk.trunkPerformer; // guided-recording instructions name Adventure's roles
             foreach (var source in locomotion.forward.sources) source.performer = 1;
             foreach (var source in locomotion.steering.sources) source.performer = Mathf.Min(2, count);
         }
@@ -330,6 +331,13 @@ namespace DigiPhant
             controller.showControls = false;
             if (movementGuide && (movementGuide.IsOpen || movementGuide.ClosedThisFrame))
             {
+                Suspend(true);
+                return;
+            }
+            if (pose.GuideActive)
+            {
+                // Guided recording owns calibration and the screen until it is closed.
+                cameraExpanded = false;
                 Suspend(true);
                 return;
             }
@@ -582,12 +590,21 @@ namespace DigiPhant
             if (!controller || !locomotion) return;
             EnsureSkin();
             var oldSkin = GUI.skin; var oldMatrix = GUI.matrix; var oldColor = GUI.color; int oldDepth = GUI.depth;
-            GUI.skin = skin; GUI.depth = -60; GUI.color = Color.white;
+            // Pose Actions draws its guided-recording panel at depth -10; drop behind it while that panel is up.
+            GUI.skin = skin; GUI.depth = pose.GuideActive ? 0 : -60; GUI.color = Color.white;
             float scale = Mathf.Min(Screen.width / 1200f, Screen.height / 760f);
             GUI.matrix = Matrix4x4.TRS(new Vector3((Screen.width - 1200 * scale) / 2, (Screen.height - 760 * scale) / 2), Quaternion.identity, Vector3.one * scale);
+            // Live numbers sit under the top HUD bar in play, and under the camera panel in the menu.
+            var numbers = State == Phase.Playing ? new Vector2(18, 82) : new Vector2(18, cameraPanelBottom + 8);
+            pose.numbersCorner = new Vector2((Screen.width - 1200 * scale) / 2 + numbers.x * scale, (Screen.height - 760 * scale) / 2 + numbers.y * scale);
             try
             {
                 if (movementGuide && movementGuide.IsOpen) return;
+                if (pose.GuideActive)
+                {
+                    DrawGuideCamera();
+                    return;
+                }
                 if (cameraExpanded)
                 {
                     DrawExpandedCamera();
@@ -652,6 +669,13 @@ namespace DigiPhant
             if (GUI.Button(new Rect(952, top - 36, 130, 30), "Enlarge", compact)) cameraExpanded = true;
             if (GUI.Button(new Rect(1088, top - 36, 84, 30), "Hide", compact)) gameplayCameraVisible = false;
             if (preview) preview.DrawImage(new Rect(952 + (220 - width) / 2, top, width, height));
+        }
+        void DrawGuideCamera()
+        {
+            // Full camera view behind the translucent guided-recording panel, so everyone can see their zone.
+            Panel(new Rect(12, 12, 1176, 736), 1);
+            if (preview) preview.DrawImage(new Rect(32, 32, 1136, 660));
+            GUI.Label(new Rect(32, 700, 1136, 38), "GUIDED RECORDING · " + (preview ? preview.Status : "Camera unavailable"));
         }
         void DrawExpandedCamera()
         {
@@ -724,6 +748,15 @@ namespace DigiPhant
             if (GUILayout.Button("Movement guide")) OpenMovementGuide();
             if (GUILayout.Button(sound ? "Sound: on" : "Sound: off")) sound = !sound;
             GUILayout.EndHorizontal();
+            if (controller.inputMode == InputMode.Camera)
+            {
+                GUILayout.Label("Pose tools: guided recording recalibrates, then saves one signal file per pose in Recordings.");
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("Guided recording")) pose.BeginGuidedRecording();
+                if (GUILayout.Button(pose.showNumbers ? "Hide numbers" : "Show numbers")) pose.showNumbers = !pose.showNumbers;
+                if (GUILayout.Button(pose.Logging ? "Stop signal log" : "Log signals")) pose.ToggleSignalLog();
+                GUILayout.EndHorizontal();
+            }
             GUILayout.Label("Advanced control setup remains in DigiPhant_Student.");
         }
         void DrawStartButton()
@@ -761,7 +794,9 @@ namespace DigiPhant
             if (GUI.Button(new Rect(213, 701, 175, 34), "Movement guide")) OpenMovementGuide();
             if (GUI.Button(new Rect(398, 701, 125, 34), sound ? "Sound: on" : "Sound: off")) sound = !sound;
             if (GUI.Button(new Rect(1008, 701, 164, 34), "Menu / restart")) ReturnToMenu();
-            GUI.Label(new Rect(538, 704, 460, 30), controller.inputMode == InputMode.Camera
+            bool bodyMode = controller.inputMode == InputMode.Camera;
+            if (bodyMode && GUI.Button(new Rect(533, 701, 150, 34), pose.showNumbers ? "Hide numbers" : "Show numbers")) pose.showNumbers = !pose.showNumbers;
+            GUI.Label(bodyMode ? new Rect(693, 704, 305, 30) : new Rect(538, 704, 460, 30), bodyMode
                 ? (useHands ? (thumbSteering ? "Thumbs: steer · Fist: grab/drop" : "Lean: steer · Fist: grab/drop") : "Lean: steer · Squat: grab/drop")
                 : "WASD · Space: jump · E: grab/drop");
         }

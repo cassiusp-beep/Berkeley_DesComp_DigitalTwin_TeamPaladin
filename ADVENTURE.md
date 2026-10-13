@@ -121,6 +121,19 @@ the three parcel tasks. Bonus obstacles do not add Adventure points.
 Keep the elephant's scene starting position/heading aligned with the builder's original start. A manually
 rerouted map (rather than the current generated Trunk Trail) needs its route geometry updated too.
 
+## Pose tools in Adventure
+
+In **Body + camera** mode the menu has three tuning buttons, shared with the student scene's status bar:
+
+- **Guided recording** recalibrates, then counts each pose in and saves one file per pose as
+  `Recordings/signals_<time>_<pose>.csv`. The menu is hidden and the camera fills the window behind the panel.
+  Instructions name Adventure's roles for the chosen player count. In seated mode the jump take is a right-hand
+  raise and the squat take is skipped. Poses do not move the elephant during a recording.
+- **Show numbers** shows every player's six live signals, measured from neutral. It is also on the gameplay toolbar.
+- **Log signals** records one continuous file, including during play. Return to the menu to stop it.
+
+Analyse a session with `tools/suggest_thresholds.py` (see `POSE_TRAINING.md`).
+
 ## Larger webcam view
 
 During play the camera is hidden by default. **Show camera** opens a small corner thumbnail;

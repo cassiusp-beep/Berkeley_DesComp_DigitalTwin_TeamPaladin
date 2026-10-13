@@ -17,7 +17,7 @@ namespace DigiPhant
     {
         public SignalCombination combination = SignalCombination.Average;
         public MovementSource[] sources = Array.Empty<MovementSource>();
-        [Range(0, 3)] public float sensitivity = 1;
+        [Range(0, 16)] public float sensitivity = 1;
         [Range(0, .5f)] public float deadZone = .12f;
         public bool TryRead(DigiPhantController controller, float now, out float value)
         {

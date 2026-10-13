@@ -52,6 +52,15 @@ namespace DigiPhant
         public bool includeSquatTake = true;
 
         [System.NonSerialized] public bool movementSuspended;
+
+        // For scenes that hide the status bar and offer these tools from their own menu (Adventure).
+        [System.NonSerialized] public int trunkPerformerOverride; // 0 = the performer who is neither driver nor navigator
+        [System.NonSerialized] public Vector2 numbersCorner = new Vector2(12, 12); // screen pixels, used when the bar is hidden
+        public bool GuideActive => guide != GuideStage.Off;
+        public bool Logging => log != null;
+        public void BeginGuidedRecording() => StartGuide(Time.realtimeSinceStartup);
+        public void ToggleSignalLog() { if (log == null) StartLog(); else StopLog(); }
+
         public float JumpHeightNow => Time.time - jumpStart < jumpSeconds
             ? 4 * jumpHeight * Mathf.Clamp01((Time.time - jumpStart) / jumpSeconds) * (1 - Mathf.Clamp01((Time.time - jumpStart) / jumpSeconds)) : 0;
 
@@ -250,10 +259,13 @@ namespace DigiPhant
                 ("neutral", "NEUTRAL", "Everyone: hold your neutral pose."),
                 ("tpose", "T-POSE", n + ": arms straight out to the sides.\nEveryone else: neutral."),
                 ("overhead", "ARMS OVERHEAD", n + ": both arms straight up (lift through the front).\nEveryone else: neutral."),
-                ("knee", "KNEE LIFT", d + ": right knee up, thigh level, hold it.\nEveryone else: neutral."),
+                // Seated mode reads the right hand as the knee, so the jump take is a hand raise (the file label stays "knee").
+                controller.upperBodyOnly
+                    ? ("knee", "RIGHT HAND UP", d + ": right hand up to chest height, hold it.\nEveryone else: neutral.")
+                    : ("knee", "KNEE LIFT", d + ": right knee up, thigh level, hold it.\nEveryone else: neutral."),
                 ("other", "OTHER MOVES", d + ": raise your left hand like walking.\n" + n + ": lean left and right, then raise one arm.\n" + t + ": neutral."),
             };
-            if (includeSquatTake) takes.Add(("squat", "SQUAT", t + ": squat with your right hand low.\nEveryone else: neutral."));
+            if (includeSquatTake && !controller.upperBodyOnly) takes.Add(("squat", "SQUAT", t + ": squat with your right hand low.\nEveryone else: neutral."));
             return takes.ToArray();
         }
 
@@ -262,6 +274,7 @@ namespace DigiPhant
         {
             get
             {
+                if (trunkPerformerOverride > 0) return trunkPerformerOverride;
                 for (int p = 1; p <= 4; p++) if (p != driver && p != navigator) return p;
                 return 3;
             }
@@ -332,6 +345,7 @@ namespace DigiPhant
             if (controller == null) return;
             GUI.depth = -10; // above the starter's panels, so the guide is never hidden
             if (showSignals) DrawStatusBar();
+            else if (showNumbers) DrawNumbers(new Rect(numbersCorner.x, numbersCorner.y, Px(290), 0), Time.realtimeSinceStartup);
             DrawGuide(Time.realtimeSinceStartup); // last, so it sits on top
         }
 

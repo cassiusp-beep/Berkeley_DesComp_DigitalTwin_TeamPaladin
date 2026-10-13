@@ -65,8 +65,8 @@ The jump threshold comes from the analyzer in step 6. P1's knee also lifts the e
 ### P2 (navigator): steering (Digi Phant Locomotion → Steering)
 
 1. Have P2 lean as far as is comfortable each way, hips still, and note **P2 Lean**. The playbook expects about ±0.3.
-2. **Sensitivity** = 1 ÷ that lean (0.3 → about 3, the maximum).
-3. **Dead Zone:** how much P2 wobbles standing upright, × Sensitivity. The playbook's 0.08 × 3 ≈ 0.24.
+2. **Sensitivity** = 1 ÷ that lean (the slider now goes to 16). Measure the lean during real play with **Show numbers**: on 12 October P2 held ±0.15 in the guided recording but only about 0.08 while playing, so the scenes use **12.5**.
+3. **Dead Zone:** the lean below which nothing turns, × Sensitivity. P2's standing sway was under 0.03, so the scenes use 0.035 × 12.5 ≈ **0.44**. Raise it if the elephant drifts when P2 means to go straight.
 4. **Turn Degrees Per Second:** the playbook suggests 90 (the default is 60).
 5. **Direction check:** P2 leaning to *their own* left must turn the elephant left. If it's backwards, set the source **Weight** to **−1**.
 
