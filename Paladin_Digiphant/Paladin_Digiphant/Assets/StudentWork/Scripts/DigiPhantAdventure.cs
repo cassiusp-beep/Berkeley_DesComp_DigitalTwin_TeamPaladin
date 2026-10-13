@@ -52,10 +52,31 @@ namespace DigiPhant
         Vector2 menuScroll, hudScroll, instructionScroll;
         bool cameraExpanded;
         float cameraPanelBottom;
+        bool lost;
+        Texture2D lostPicture;
+        // Assets/StudentWork/Resources/OutOfHealthElephant.png, loaded the first time the results screen needs it.
+        Texture2D LostPicture => lostPicture ? lostPicture : lostPicture = Resources.Load<Texture2D>("OutOfHealthElephant");
+        // Solo seated hand shapes: each hand's accepted shape, and what its actions need to remember.
+        string rightShape = "None", leftShape = "None", rightPending = "None", leftPending = "None";
+        int rightRun, leftRun, lastHandFrame = -1;
+        float rightSeenAt = -99, leftSeenAt = -99, rightSince, leftSince, rightHandAt = -99, lastShapeJump = -99;
+        bool jumpFired, tootFired, aboutTurnFired, grabComplained;
+        [Tooltip("Solo seated hand shapes: shoulder tilt below this does not steer.")]
+        public float seatedLeanDeadZone = .06f;
+        [Tooltip("Solo seated hand shapes: shoulder tilt that gives full turn speed.")]
+        public float seatedLeanFull = .2f;
+        [Tooltip("Solo seated hand shapes: set to 1 if the trunk swings the opposite way to your right hand.")]
+        public float trunkSwingSign = -1;
+        // One seated player with hands on: every control is a hand shape (the player's own left and right).
+        public bool SoloSeatedShapes => useHands && controller && controller.inputMode == InputMode.Camera
+            && controller.performerCount == 1 && controller.upperBodyOnly;
         GUISkin skin;
         Material road, grass, hurdleBlue, hurdleRed, hurdleWhite, orange, green, cream;
         Material[] giftWrap, giftRibbon;
-        Material halloweenDark, halloweenBone, pumpkinOrange;
+        Material halloweenDark, halloweenBone, pumpkinOrange, halloweenStone, halloweenMoon, halloweenWindow, halloweenBrew;
+        class Bat { public Transform root, leftWing, rightWing; public Vector3 center; public float born, angle, spin, spread, rise, size, phase; }
+        readonly List<Bat> bats = new List<Bat>();
+        const float BatSeconds = 5;
         Texture2D heartIcon, scoreIcon;
         Transform stopSign;
         Renderer stopPositiveText, stopNegativeText;
@@ -141,6 +162,10 @@ namespace DigiPhant
             halloweenDark = Material(new Color(.075f, .055f, .10f));
             halloweenBone = Material(new Color(.85f, .83f, .71f));
             pumpkinOrange = Material(new Color(.95f, .30f, .045f));
+            halloweenStone = Material(new Color(.27f, .24f, .32f));
+            halloweenMoon = Glow(new Color(1f, .80f, .22f));
+            halloweenWindow = Glow(new Color(1f, .58f, .10f));
+            halloweenBrew = Glow(new Color(.42f, .95f, .18f));
             giftWrap = new[] { pumpkinOrange, hurdleBlue, Material(new Color(.35f, .57f, .16f)) };
             giftRibbon = new[] { halloweenDark, hurdleWhite, hurdleBlue };
             SetRoles(1);
@@ -152,6 +177,10 @@ namespace DigiPhant
             var shader = Shader.Find("Universal Render Pipeline/Lit");
             if (!shader) shader = Shader.Find("Standard");
             var m = new Material(shader) { color = color }; resources.Add(m); return m;
+        }
+        Material Glow(Color color)
+        {
+            var m = Material(color); m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", color * 1.5f); return m;
         }
         Vector3 World(Vector3 p) => origin + initialRotation * p;
         Vector3 Local(Vector3 p) => Quaternion.Inverse(initialRotation) * (p - origin);
@@ -252,7 +281,7 @@ namespace DigiPhant
             if (course) { course.gameObject.SetActive(false); Destroy(course.gameObject); }
             course = new GameObject("Adventure course (generated)").transform;
             trunk.AssignProp(null);
-            route.Clear(); rocks.Clear(); cargo.Clear(); activeCargo = 0;
+            route.Clear(); rocks.Clear(); cargo.Clear(); bats.Clear(); activeCargo = 0;
             if (trail) { BuildTrailTasks(); BuildHalloweenDecorations(); return; }
             length = difficulty == Difficulty.Easy ? 90 : difficulty == Difficulty.Normal ? 140 : 190;
             halfWidth = difficulty == Difficulty.Easy ? 5 : difficulty == Difficulty.Normal ? 4 : 3;
@@ -314,24 +343,31 @@ namespace DigiPhant
         }
         void BuildHalloweenDecorations()
         {
-            // Small, deterministic accents. Clearance includes BOTH routes even when the bonus is closed.
-            for (int i = 0; i < 14; i++)
+            // Deterministic roadside scenery. Clearance includes BOTH routes even when the bonus is closed.
+            string[] kinds = {
+                "pumpkin", "lamp", "tombs", "ghost", "cat", "skeleton", "hill", "pumpkin", "cauldron", "tree",
+                "hut", "lamp", "pumpkin", "tower", "ghost", "tombs", "cat", "tree", "skeleton", "hill",
+                "pumpkin", "cauldron", "tower", "ghost", "lamp", "hut", "tombs", "pumpkin", "tree", "cat" };
+            for (int i = 0; i < kinds.Length; i++)
             {
+                string kind = kinds[i];
+                // Landmarks stand further back so they frame the route without crowding it.
+                bool landmark = kind == "hill" || kind == "tower" || kind == "hut" || kind == "tree";
                 Vector3 center, forward;
                 if (trail)
                 {
-                    var point = trailLayout.loop.At((i + .5f) / 14 * trailLayout.loopLength, out var tangent);
+                    var point = trailLayout.loop.At((i + .5f) / kinds.Length * trailLayout.loopLength, out var tangent);
                     center = new Vector3(point.x, 0, point.y);
                     forward = new Vector3(tangent.x, 0, tangent.y);
                 }
-                else { center = Path((i + .5f) / 14 * length); forward = Vector3.forward; }
+                else { center = Path((i + .5f) / kinds.Length * length); forward = Vector3.forward; }
                 Vector3 side = new Vector3(forward.z, 0, -forward.x) * (i % 2 == 0 ? 1 : -1);
                 Vector3 location = Vector3.zero;
                 bool placed = false;
                 for (int attempt = 0; attempt < 5; attempt++)
                 {
-                    location = center + side * (halfWidth + 4.5f + attempt * 1.5f);
-                    if (trail && trailLayout.DistanceToPaths(new Vector2(location.x, location.z)) < 6.5f) continue;
+                    location = center + side * (halfWidth + (landmark ? trail ? 8 : 13 : 4.5f) + attempt * 1.5f);
+                    if (trail && trailLayout.DistanceToPaths(new Vector2(location.x, location.z)) < (landmark ? 9.5f : 6.5f)) continue;
                     var world = World(location);
                     if (trail && groundFollow && groundFollow.terrain)
                     {
@@ -342,6 +378,11 @@ namespace DigiPhant
                         world.y = terrain.SampleHeight(world) + terrain.transform.position.y;
                         location = Local(world);
                     }
+                    // Parcels and their landing circles stay clear of scenery.
+                    bool blocksTask = false;
+                    foreach (var c in cargo)
+                        blocksTask |= FlatDistance(world, c.item.position) < 5 || FlatDistance(world, c.target.position) < 5;
+                    if (blocksTask) continue;
                     placed = true; break;
                 }
                 if (!placed) continue;
@@ -350,7 +391,146 @@ namespace DigiPhant
                 decoration.SetPositionAndRotation(World(location), initialRotation * Quaternion.LookRotation(-side));
                 Transform Part(string name, PrimitiveType type, Vector3 at, Vector3 size, Material material) =>
                     GiftDetail(decoration, name, type, at, size, material);
-                if (i % 7 == 5)
+                // A rounded limb between two points, with a knuckle so chained limbs join cleanly.
+                void Rod(Vector3 a, Vector3 b, float width, Material material)
+                {
+                    var rod = Part("Limb", PrimitiveType.Cylinder, (a + b) / 2, new Vector3(width, (b - a).magnitude / 2, width), material);
+                    rod.localRotation = Quaternion.FromToRotation(Vector3.up, b - a);
+                    Part("Knuckle", PrimitiveType.Sphere, b, Vector3.one * width, material);
+                }
+                // Stacked discs stand in for a cone; lean bends the tip sideways like a crooked hat.
+                void Cone(string name, Vector3 foot, float radius, float height, float lean, Material material)
+                {
+                    for (int n = 0; n < 6; n++)
+                    {
+                        float u = n / 6f, width = radius * 2 * (1 - u * .9f);
+                        Part(name, PrimitiveType.Cylinder, foot + new Vector3(lean * u * u, height * (u + 1 / 12f), 0), new Vector3(width, height / 12, width), material);
+                    }
+                }
+                if (kind == "hill")
+                {
+                    // Curled hilltop silhouetted against a low full moon.
+                    Part("Hill mound", PrimitiveType.Sphere, new Vector3(0, .3f, 0), new Vector3(4.2f, 2.6f, 2.6f), halloweenDark);
+                    for (int n = 0; n < 34; n++)
+                    {
+                        float u = n / 33f, width; Vector3 at;
+                        if (u < .45f)
+                        {
+                            float rise = u / .45f;
+                            at = new Vector3(Mathf.Lerp(-.7f, .55f, rise * rise), Mathf.Lerp(1.1f, 3.44f, rise), 0); width = Mathf.Lerp(1.5f, .5f, rise);
+                        }
+                        else
+                        {
+                            float curl = (u - .45f) / .55f, angle = Mathf.Lerp(160, -290, curl) * Mathf.Deg2Rad, radius = Mathf.Lerp(.85f, .14f, curl);
+                            at = new Vector3(1.35f + Mathf.Cos(angle) * radius, 3.15f + Mathf.Sin(angle) * radius, 0); width = Mathf.Lerp(.5f, .2f, curl);
+                        }
+                        Part("Spiral hilltop", PrimitiveType.Sphere, at, new Vector3(width, width, width * .8f), halloweenDark);
+                    }
+                    Part("Full moon", PrimitiveType.Sphere, new Vector3(1.1f, 3.5f, -.7f), new Vector3(3.4f, 3.4f, .12f), halloweenMoon);
+                    for (int n = -1; n <= 1; n++)
+                        Part("Hill pumpkin", PrimitiveType.Sphere, new Vector3(n * .7f, .9f, 1.05f), new Vector3(.34f, .28f, .34f), pumpkinOrange);
+                }
+                else if (kind == "tower")
+                {
+                    // Crooked three-storey house with lit windows and a bent roof.
+                    Part("Foundation", PrimitiveType.Cube, new Vector3(0, -.3f, 0), new Vector3(1.9f, 1.2f, 1.9f), halloweenDark);
+                    float[] shift = { 0, .2f, -.1f };
+                    for (int floor = 0; floor < 3; floor++)
+                    {
+                        float width = 1.6f - floor * .25f;
+                        var storey = Part("Crooked storey", PrimitiveType.Cube, new Vector3(shift[floor], .9f + floor * 1.35f, 0), new Vector3(width, 1.4f, width), halloweenStone);
+                        storey.localRotation = Quaternion.Euler(0, floor * 9, (floor - 1) * 5);
+                        for (int window = -1; window <= 1; window += 2)
+                            GiftDetail(storey, "Lit window", PrimitiveType.Cube, new Vector3(window * .22f, .1f, .51f), new Vector3(.17f, .28f, .03f), halloweenWindow);
+                        if (floor == 0) GiftDetail(storey, "Door", PrimitiveType.Cube, new Vector3(0, -.28f, .52f), new Vector3(.2f, .44f, .03f), halloweenDark);
+                    }
+                    Cone("Crooked roof", new Vector3(-.1f, 4.2f, 0), .95f, 1.8f, .5f, halloweenDark);
+                }
+                else if (kind == "hut")
+                {
+                    // Round hut wearing a witch's hat.
+                    Part("Hut wall", PrimitiveType.Cylinder, new Vector3(0, .35f, 0), new Vector3(1.7f, .9f, 1.7f), halloweenStone);
+                    Part("Hat brim", PrimitiveType.Cylinder, new Vector3(0, 1.28f, 0), new Vector3(2.7f, .05f, 2.7f), halloweenDark);
+                    Cone("Witch hat", new Vector3(0, 1.3f, 0), .8f, 2.4f, .6f, halloweenDark);
+                    Part("Hat band", PrimitiveType.Cylinder, new Vector3(0, 1.44f, 0), new Vector3(1.66f, .1f, 1.66f), pumpkinOrange);
+                    Part("Glowing door", PrimitiveType.Cube, new Vector3(0, .5f, .83f), new Vector3(.45f, .85f, .08f), halloweenWindow);
+                }
+                else if (kind == "tree")
+                {
+                    // Bare twisted tree with a lantern hanging from one bough.
+                    Vector3 root = new Vector3(0, -.4f, 0), bend = new Vector3(.15f, 1.3f, 0), crown = new Vector3(-.1f, 2.3f, .05f);
+                    Rod(root, bend, .38f, halloweenDark); Rod(bend, crown, .28f, halloweenDark);
+                    Rod(crown, new Vector3(-.9f, 3, 0), .14f, halloweenDark); Rod(new Vector3(-.9f, 3, 0), new Vector3(-1.5f, 2.8f, 0), .09f, halloweenDark);
+                    Rod(crown, new Vector3(.2f, 3.3f, -.1f), .13f, halloweenDark); Rod(new Vector3(.2f, 3.3f, -.1f), new Vector3(.7f, 3.7f, 0), .08f, halloweenDark);
+                    Rod(bend, new Vector3(1, 2.1f, .1f), .15f, halloweenDark); Rod(new Vector3(1, 2.1f, .1f), new Vector3(1.5f, 2.9f, 0), .1f, halloweenDark);
+                    Rod(new Vector3(1.5f, 2.9f, 0), new Vector3(1.9f, 2.8f, 0), .07f, halloweenDark);
+                    Rod(new Vector3(1.5f, 2.9f, 0), new Vector3(1.5f, 2.3f, 0), .03f, halloweenDark);
+                    Part("Hanging lantern", PrimitiveType.Sphere, new Vector3(1.5f, 2.15f, 0), Vector3.one * .32f, halloweenWindow);
+                }
+                else if (kind == "tombs")
+                {
+                    // Small graveyard: two headstones, a cross, and an iron fence behind.
+                    for (int n = -1; n <= 1; n += 2)
+                    {
+                        float height = n < 0 ? .7f : .95f;
+                        Part("Headstone", PrimitiveType.Cube, new Vector3(n * .85f, height / 2, -.2f), new Vector3(.5f, height, .14f), halloweenStone);
+                        Part("Headstone top", PrimitiveType.Cylinder, new Vector3(n * .85f, height, -.2f), new Vector3(.5f, .07f, .5f), halloweenStone)
+                            .localRotation = Quaternion.Euler(90, 0, 0);
+                    }
+                    Part("Cross post", PrimitiveType.Cube, new Vector3(0, .55f, 0), new Vector3(.14f, 1.1f, .12f), halloweenStone);
+                    Part("Cross arm", PrimitiveType.Cube, new Vector3(0, .8f, 0), new Vector3(.55f, .14f, .12f), halloweenStone);
+                    for (int n = 0; n < 9; n++)
+                        Part("Fence post", PrimitiveType.Cube, new Vector3(-1.6f + n * .4f, .45f, -.6f), new Vector3(.05f, .9f, .05f), halloweenDark);
+                    Part("Fence rail", PrimitiveType.Cube, new Vector3(0, .62f, -.6f), new Vector3(3.3f, .05f, .04f), halloweenDark);
+                }
+                else if (kind == "cat")
+                {
+                    // Sitting black cat with glowing eyes and a curled tail.
+                    Part("Cat body", PrimitiveType.Sphere, new Vector3(0, .42f, 0), new Vector3(.55f, .8f, .6f), halloweenDark);
+                    Part("Cat head", PrimitiveType.Sphere, new Vector3(0, .98f, .12f), new Vector3(.48f, .42f, .42f), halloweenDark);
+                    for (int ear = -1; ear <= 1; ear += 2)
+                    {
+                        Part("Cat ear", PrimitiveType.Cube, new Vector3(ear * .15f, 1.2f, .12f), new Vector3(.14f, .14f, .06f), halloweenDark)
+                            .localRotation = Quaternion.Euler(0, 0, 45);
+                        Part("Cat eye", PrimitiveType.Sphere, new Vector3(ear * .1f, 1, .31f), new Vector3(.1f, .06f, .04f), halloweenWindow);
+                    }
+                    for (int n = 0; n < 12; n++)
+                    {
+                        float curl = n / 11f, angle = Mathf.Lerp(180, -160, curl) * Mathf.Deg2Rad, radius = Mathf.Lerp(.38f, .1f, curl);
+                        Part("Cat tail", PrimitiveType.Sphere, new Vector3(.62f + Mathf.Cos(angle) * radius, .5f + Mathf.Sin(angle) * radius, -.1f),
+                            Vector3.one * Mathf.Lerp(.14f, .09f, curl), halloweenDark);
+                    }
+                }
+                else if (kind == "lamp")
+                {
+                    // Pair of striped lamp posts with glowing lanterns.
+                    for (int post = -1; post <= 1; post += 2)
+                    {
+                        float x = post * .9f, lantern = x - post * .3f;
+                        for (int n = 0; n < 8; n++)
+                            Part("Striped lamp post", PrimitiveType.Cylinder, new Vector3(x, .15f + n * .3f, 0), new Vector3(.13f, .15f, .13f), n % 2 == 0 ? pumpkinOrange : halloweenDark);
+                        Rod(new Vector3(x, 2.4f, 0), new Vector3(x, 2.65f, 0), .07f, halloweenDark);
+                        Rod(new Vector3(x, 2.65f, 0), new Vector3(lantern, 2.78f, 0), .07f, halloweenDark);
+                        Part("Lantern cap", PrimitiveType.Cylinder, new Vector3(lantern, 2.72f, 0), new Vector3(.3f, .03f, .3f), halloweenDark);
+                        Part("Lantern glow", PrimitiveType.Sphere, new Vector3(lantern, 2.56f, 0), Vector3.one * .28f, halloweenWindow);
+                    }
+                }
+                else if (kind == "cauldron")
+                {
+                    // Three-legged cauldron of bubbling green brew.
+                    Part("Cauldron", PrimitiveType.Sphere, new Vector3(0, .5f, 0), new Vector3(1.2f, .9f, 1.2f), halloweenDark);
+                    Part("Cauldron rim", PrimitiveType.Cylinder, new Vector3(0, .85f, 0), new Vector3(1.05f, .05f, 1.05f), halloweenDark);
+                    Part("Bubbling brew", PrimitiveType.Cylinder, new Vector3(0, .9f, 0), new Vector3(.92f, .02f, .92f), halloweenBrew);
+                    for (int n = 0; n < 3; n++)
+                    {
+                        float angle = n * Mathf.PI * 2 / 3;
+                        var out3 = new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle));
+                        Rod(out3 * .38f + Vector3.up * .25f, out3 * .55f, .1f, halloweenDark);
+                        Part("Brew bubble", PrimitiveType.Sphere, out3 * .22f + Vector3.up * .93f, Vector3.one * (.16f + n * .04f), halloweenBrew);
+                    }
+                    Rod(new Vector3(.2f, .9f, 0), new Vector3(.75f, 1.5f, .1f), .05f, halloweenStone);
+                }
+                else if (kind == "skeleton")
                 {
                     // Friendly, small skeleton: skull, ribs, and simple jointed limbs.
                     Part("Skull", PrimitiveType.Sphere, new Vector3(0, 1.45f, 0), new Vector3(.38f, .43f, .32f), halloweenBone);
@@ -372,7 +552,7 @@ namespace DigiPhant
                         Bone(new Vector3(sign * .3f, .93f, 0), new Vector3(sign * .36f, .73f, .04f));
                     }
                 }
-                else if (i % 5 == 3)
+                else if (kind == "ghost")
                 {
                     Part("Ghost sheet", PrimitiveType.Sphere, new Vector3(0, 1, 0), new Vector3(.75f, 1.1f, .6f), halloweenBone);
                     for (int hem = -1; hem <= 1; hem++)
@@ -591,6 +771,7 @@ namespace DigiPhant
             { Say("Calibrate your resting pose before starting."); return; }
             Score = 0; Health = 100; elapsed = outsideSeconds = 0; result = "";
             grabArmed = true; lastGrabGesture = "None"; previousCarry = previousJump = false;
+            ResetShapes(); ClearHandDriving();
             locomotion.StopMotion(); pose.ResetGameMotion();
             locomotion.travelRoot.SetPositionAndRotation(initialPosition, initialRotation);
             if (locomotion.followCamera) locomotion.followCamera.transform.position = cameraPosition;
@@ -601,13 +782,14 @@ namespace DigiPhant
         }
         void ReturnToMenu()
         {
-            State = Phase.Menu; Suspend(true); locomotion.handSteering = false;
+            State = Phase.Menu; Suspend(true); ClearHandDriving();
             trunk.ResetProp(); previousCarry = false;
         }
         void EndGame(bool won)
         {
             State = Phase.Results; Suspend(true);
             result = won ? "TRAIL COMPLETE!" : "OUT OF HEALTH";
+            lost = !won;
             Play(won ? "win" : "hit");
         }
         void Say(string text) { feedback = text; feedbackUntil = Time.unscaledTime + 4; }
@@ -644,7 +826,7 @@ namespace DigiPhant
             { Suspend(true); return; }
             Suspend(false);
             if (useHands && controller.inputMode == InputMode.Camera) ReadHands();
-            else { locomotion.handSteering = false; grabArmed = false; }
+            else { ClearHandDriving(); grabArmed = false; }
             var keyboard = Keyboard.current;
             if (keyboard != null && controller.inputMode == InputMode.TestSliders)
             {
@@ -657,8 +839,105 @@ namespace DigiPhant
             }
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToMenu();
         }
+        // What the game currently reads from a hand, for the play toolbar ("none" = hidden or not a known shape).
+        static string ShapeName(string shape) => shape == "Open_Palm" ? "palm" : shape == "Closed_Fist" ? "fist"
+            : shape == "Thumb_Up" ? "thumb up" : shape == "Thumb_Down" ? "thumb down" : shape == "Victory" ? "victory"
+            : shape == "Pointing_Up" ? "point up" : shape == "ILoveYou" ? "I-love-you" : "none";
+        void ClearHandDriving()
+        {
+            locomotion.handSteering = locomotion.handThrottle = false;
+            pose.posesFromGestures = pose.gestureRear = false;
+            controller.muteBodySignals = false;
+            gestures.trunkLift = gestures.trunkSwing = 0;
+        }
+        void ResetShapes()
+        {
+            rightShape = leftShape = rightPending = leftPending = "None";
+            rightRun = leftRun = 0;
+            rightSeenAt = leftSeenAt = rightHandAt = lastShapeJump = -99;
+            jumpFired = tootFired = aboutTurnFired = grabComplained = false;
+        }
+        // A shape is accepted once it has been read, confidently, on 4 tracker frames in a row, so the reading
+        // cannot flicker between shapes. A hand that shows no shape for 0.3 s reads as gone.
+        static void TrackShape(bool seen, string shape, bool newFrame, ref string accepted, ref string pending, ref int run,
+            ref float seenAt, ref float since, float now)
+        {
+            if (seen) seenAt = now;
+            if (newFrame)
+            {
+                if (!seen) { pending = "None"; run = 0; }
+                else if (shape == pending) run++;
+                else { pending = shape; run = 1; }
+                if (seen && run >= 4 && pending != accepted) { accepted = pending; since = now; }
+            }
+            if (accepted != "None" && now - seenAt > .3f) { accepted = "None"; since = now; }
+        }
+        // Solo seated: the LEFT hand drives movement and the RIGHT hand does the trunk and actions, so the two
+        // combine freely. Shoulder tilt steers. Two open palms is neutral.
+        void ReadSoloSeatedShapes(float now)
+        {
+            const string Palm = "Open_Palm", Fist = "Closed_Fist", Up = "Thumb_Up", Down = "Thumb_Down",
+                Victory = "Victory", Point = "Pointing_Up", LoveYou = "ILoveYou";
+            bool newFrame = gestures.PacketCount != lastHandFrame;
+            lastHandFrame = gestures.PacketCount;
+            bool leftShown = gestures.TryReadHand(1, "L", out string leftNow, out _, out _) && leftNow != "None";
+            bool rightInView = gestures.TryReadHand(1, "R", out string rightNow, out float handRight, out float handUp);
+            TrackShape(leftShown, leftNow, newFrame, ref leftShape, ref leftPending, ref leftRun, ref leftSeenAt, ref leftSince, now);
+            TrackShape(rightInView && rightNow != "None", rightNow, newFrame, ref rightShape, ref rightPending, ref rightRun, ref rightSeenAt, ref rightSince, now);
+            string l = leftShape, r = rightShape;
+            pose.posesFromGestures = true;      // hand shapes own jump, rear up and about-turn
+            controller.muteBodySignals = true;  // hands in the air must not lift legs or flap ears
+            locomotion.handThrottle = locomotion.handSteering = true;
+
+            // ----- RIGHT hand: trunk and actions -----
+            // The trunk follows where the right hand is, whatever shape it makes: chest height is level.
+            if (rightInView)
+            {
+                rightHandAt = now;
+                gestures.trunkLift = Mathf.Clamp((handUp + .4f) / .8f, -1, 1);
+                gestures.trunkSwing = trunkSwingSign * Mathf.Clamp((handRight - .1f) / .6f, -1, 1);
+            }
+            else if (now - rightHandAt > .3f) gestures.trunkLift = gestures.trunkSwing = 0;
+            // Closed fist: pick up, and keep carrying. It keeps trying while the fist is held, so it grabs on arrival.
+            if (r != Fist) grabComplained = false;
+            else if (!trunk.Carrying && !trunk.TryToggleGrab() && !grabComplained)
+            { grabComplained = true; Say("Lower the trunk near the parcel and slow down."); }
+            // Open palm: drop. Only an open palm drops, so a lost hand or another shape keeps carrying.
+            if (r == Palm && trunk.Carrying) trunk.TryToggleGrab();
+            // Thumb up: jump, once per thumb, at most once a second. Jumps forward when moving.
+            if (r != Up) jumpFired = false;
+            else if (!jumpFired)
+            {
+                jumpFired = true;
+                if (now - lastShapeJump >= 1f) { lastShapeJump = now; pose.TestJump(); }
+            }
+            // Victory, held 0.5 s: victory toot, once per sign.
+            if (r != Victory) tootFired = false;
+            else if (!tootFired && now - rightSince >= .5f) { tootFired = true; gestures.PlayCelebrate(); Play("toot"); }
+            // I-love-you, held: rear up on two legs for as long as it is held.
+            pose.gestureRear = r == LoveYou;
+
+            // ----- LEFT hand: movement -----
+            // I-love-you, held 0.6 s: about-turn, once per sign.
+            if (l != LoveYou) aboutTurnFired = false;
+            else if (!aboutTurnFired && now - leftSince >= .6f) { aboutTurnFired = true; pose.TestAboutTurn(); }
+            // Open palm stops, one finger walks, two fingers run, thumb down backs up. A lost hand stops.
+            float throttle = l == Point ? .6f : l == Victory ? 1f : l == Down ? -.6f : 0;
+
+            // ----- Shoulders: turning -----
+            float steer = 0;
+            if (controller.TryReadMovement(1, Movement.Lean, Time.realtimeSinceStartup, out float lean))
+                steer = -Mathf.Sign(lean) * Mathf.InverseLerp(seatedLeanDeadZone, Mathf.Max(seatedLeanFull, seatedLeanDeadZone + .01f), Mathf.Abs(lean));
+
+            // Rear up and about-turn pause travel while they play. Jump and toot do not.
+            bool paused = pose.gestureRear || pose.CurrentPoseAction == "Rear up" || pose.CurrentPoseAction == "About-turn";
+            locomotion.handThrottleValue = paused ? 0 : throttle;
+            locomotion.handSteeringValue = paused ? 0 : steer;
+        }
         void ReadHands()
         {
+            if (SoloSeatedShapes) { ReadSoloSeatedShapes(Time.unscaledTime); return; }
+            ClearHandDriving();
             // Keep the familiar calibrated lean steering unless thumb steering was explicitly chosen.
             locomotion.handSteering = thumbSteering;
             if (thumbSteering)
@@ -750,6 +1029,7 @@ namespace DigiPhant
         }
         void LateUpdate()
         {
+            UpdateBats();
             if (State == Phase.Playing && !locomotion.movementSuspended) StopAtCourseWalls();
             UpdateCamera();
             UpdateStopSignLettering();
@@ -847,6 +1127,59 @@ namespace DigiPhant
                 Say(clear ? "Jump cleared · +" + reward : penalty == 0 ? "Bonus hurdle hit · no points" : "Obstacle hit · −1"); Play(clear ? "point" : "hit");
             }
         }
+        void SpawnBats(Vector3 center)
+        {
+            // A startled colony bursts out of the landing circle and spirals away.
+            for (int n = 0; n < 14; n++)
+            {
+                var root = new GameObject("Delivery bat").transform;
+                root.SetParent(course, false); root.position = center; root.localScale = Vector3.zero;
+                GiftDetail(root, "Bat body", PrimitiveType.Sphere, Vector3.zero, new Vector3(.16f, .16f, .28f), halloweenDark);
+                GiftDetail(root, "Bat head", PrimitiveType.Sphere, new Vector3(0, .03f, .15f), Vector3.one * .13f, halloweenDark);
+                var wings = new Transform[2];
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    GiftDetail(root, "Bat ear", PrimitiveType.Cube, new Vector3(side * .04f, .11f, .15f), new Vector3(.035f, .08f, .025f), halloweenDark);
+                    var wing = new GameObject("Bat wing").transform;
+                    wing.SetParent(root, false); wing.localPosition = new Vector3(side * .05f, 0, 0);
+                    GiftDetail(wing, "Wing membrane", PrimitiveType.Cube, new Vector3(side * .24f, 0, 0), new Vector3(.46f, .02f, .24f), halloweenDark);
+                    GiftDetail(wing, "Wing tip", PrimitiveType.Cube, new Vector3(side * .54f, 0, -.04f), new Vector3(.24f, .02f, .14f), halloweenDark);
+                    wings[(side + 1) / 2] = wing;
+                }
+                bats.Add(new Bat
+                {
+                    root = root, leftWing = wings[0], rightWing = wings[1], center = center, born = Time.time,
+                    angle = n * Mathf.PI * 2 / 14 + UnityEngine.Random.value, spin = UnityEngine.Random.Range(1.2f, 2.2f) * (n % 2 == 0 ? 1 : -1),
+                    spread = UnityEngine.Random.Range(.9f, 1.7f), rise = UnityEngine.Random.Range(1.3f, 2.4f),
+                    size = UnityEngine.Random.Range(.9f, 1.4f), phase = UnityEngine.Random.value * 6
+                });
+            }
+            Play("bats");
+        }
+        void UpdateBats()
+        {
+            for (int i = bats.Count - 1; i >= 0; i--)
+            {
+                Bat bat = bats[i];
+                float age = Time.time - bat.born;
+                if (!bat.root || age > BatSeconds)
+                {
+                    if (bat.root) Destroy(bat.root.gameObject);
+                    bats.RemoveAt(i); continue;
+                }
+                float angle = bat.angle + bat.spin * age, radius = .5f + bat.spread * age;
+                Vector3 next = bat.center + new Vector3(Mathf.Cos(angle) * radius,
+                    .2f + bat.rise * age + Mathf.Sin(age * 5 + bat.phase) * .25f, Mathf.Sin(angle) * radius);
+                Vector3 move = next - bat.root.position;
+                if (move.sqrMagnitude > .000001f) bat.root.rotation = Quaternion.LookRotation(move);
+                bat.root.position = next;
+                // Pop out of the ground, then shrink away instead of vanishing mid-air.
+                bat.root.localScale = Vector3.one * bat.size * Mathf.Clamp01(age * 4) * Mathf.Clamp01((BatSeconds - age) * 2);
+                float flap = Mathf.Sin(age * 22 + bat.phase) * 50;
+                bat.leftWing.localRotation = Quaternion.Euler(0, 0, -flap);
+                bat.rightWing.localRotation = Quaternion.Euler(0, 0, flap);
+            }
+        }
         void UpdateDeliveries()
         {
             if (activeCargo >= cargo.Count) return;
@@ -863,7 +1196,7 @@ namespace DigiPhant
             if (expired || delivered)
             {
                 c.resolved = true;
-                if (!expired && delivered) { Score++; Play("point"); Say("Delivery complete · +1"); }
+                if (!expired && delivered) { Score++; Play("point"); Say("Delivery complete · +1"); SpawnBats(c.target.position); }
                 else Say("Delivery timed out · no points");
                 trunk.AssignProp(null); c.item.gameObject.SetActive(false);
                 activeCargo++;
@@ -877,6 +1210,7 @@ namespace DigiPhant
             AddSound("step", 75, 45, .12f); AddSound("jump", 190, 600, .3f);
             AddSound("pickup", 380, 760, .18f); AddSound("drop", 420, 160, .22f);
             AddSound("point", 660, 990, .25f); AddSound("hit", 130, 65, .25f);
+            AddSound("toot", 300, 560, .7f); AddSound("bats", 2400, 1500, .4f);
             const int sampleRate = 22050;
             var samples = new float[sampleRate];
             float[] notes = { 523.25f, 659.25f, 783.99f, 1046.5f };
@@ -977,7 +1311,18 @@ namespace DigiPhant
                     menuScroll = GUILayout.BeginScrollView(menuScroll);
                     if (State == Phase.Results)
                     {
-                        Heading(result, 42); GUILayout.Space(16);
+                        if (lost && LostPicture)
+                        {
+                            // Losing shows the knocked-out elephant beside the heading.
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Label(result, new GUIStyle(skin.label) { fontSize = 42, fontStyle = FontStyle.Bold, wordWrap = false, alignment = TextAnchor.MiddleLeft },
+                                GUILayout.ExpandWidth(false), GUILayout.Height(132));
+                            GUILayout.FlexibleSpace();
+                            GUI.DrawTexture(GUILayoutUtility.GetRect(200, 132, GUILayout.Width(200), GUILayout.Height(132)), LostPicture, ScaleMode.ScaleToFit);
+                            GUILayout.EndHorizontal();
+                        }
+                        else Heading(result, 42);
+                        GUILayout.Space(16);
                         Heading("Score  " + Score + "     Health  " + Mathf.CeilToInt(Health), 26);
                         GUILayout.Label("Time  " + TimeSpan.FromSeconds(elapsed).ToString(@"mm\:ss"));
                         GUILayout.Label("Deliveries  " + activeCargo + " / " + cargo.Count + " resolved");
@@ -1072,7 +1417,13 @@ namespace DigiPhant
                 GUILayout.Label(seated ? "Stay closer: keep shoulders and both hands visible. Feet are not required."
                     : "Need more room? Choose Seated / close-up to play without showing your legs.");
                 useHands = Choices(useHands ? 1 : 0, new[] { "Pose only", "Easy pose + hands" }) == 1;
-                if (useHands)
+                if (useHands && people == 1 && seated)
+                {
+                    GUILayout.Label("Solo seated: LEFT hand = movement, RIGHT hand = trunk and actions, tilt your shoulders to turn. Rest with both palms open, at chest height, facing the camera.\n"
+                        + "LEFT: open palm stop · one finger up walk · victory (two fingers) run · thumb down back · I-love-you held 0.6 s about-turn\n"
+                        + "RIGHT: the trunk follows your hand · fist pick up and carry · open palm drop · thumb up jump · victory held 0.5 s toot · I-love-you held rear up");
+                }
+                else if (useHands)
                 {
                     thumbSteering = Choices(thumbSteering ? 1 : 0, new[] { "Lean to steer", "Thumb steering" }) == 1;
                     GUILayout.Label("Hold a fist briefly to grab/drop. Open your hand before the next action.");
@@ -1212,7 +1563,7 @@ namespace DigiPhant
             bool bodyMode = controller.inputMode == InputMode.Camera;
             if (bodyMode && GUI.Button(new Rect(533, 701, 150, 34), pose.showNumbers ? "Hide numbers" : "Show numbers")) pose.showNumbers = !pose.showNumbers;
             GUI.Label(bodyMode ? new Rect(693, 704, 305, 30) : new Rect(538, 704, 460, 30), bodyMode
-                ? (useHands ? (thumbSteering ? "Thumbs: steer · Fist: grab/drop" : "Lean: steer · Fist: grab/drop") : "Lean: steer · Squat: grab/drop")
+                ? (SoloSeatedShapes ? "L: " + ShapeName(leftShape) + " · R: " + ShapeName(rightShape) : useHands ? (thumbSteering ? "Thumbs: steer · Fist: grab/drop" : "Lean: steer · Fist: grab/drop") : "Lean: steer · Squat: grab/drop")
                 : "WASD · Space: jump · E: grab/drop");
         }
         void OpenMovementGuide()

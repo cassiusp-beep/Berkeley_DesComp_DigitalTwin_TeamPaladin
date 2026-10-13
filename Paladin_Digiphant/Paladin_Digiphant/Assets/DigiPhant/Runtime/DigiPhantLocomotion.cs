@@ -44,6 +44,8 @@ namespace DigiPhant
         [NonSerialized] public bool movementSuspended;
         [NonSerialized] public bool handSteering;
         [NonSerialized] public float handSteeringValue;
+        [NonSerialized] public bool handThrottle;
+        [NonSerialized] public float handThrottleValue;
         public Transform travelRoot;
         public Animator elephantAnimator;
         public Transform animationMotionRoot;
@@ -166,8 +168,9 @@ namespace DigiPhant
             if (scriptedInput) { desiredForward = scriptedForward; desiredTurn = scriptedSteering; }
             else if (controller.inputMode == InputMode.Camera)
             {
-                bool moving = forward.TryRead(controller, now, out desiredForward);
-                if (desiredForward < 0) desiredForward *= backwardSensitivity;
+                bool moving = handThrottle || forward.TryRead(controller, now, out desiredForward);
+                if (handThrottle) desiredForward = handThrottleValue;
+                else if (desiredForward < 0) desiredForward *= backwardSensitivity;
                 bool turning = handSteering || steering.TryRead(controller, now, out desiredTurn);
                 if (handSteering) desiredTurn = handSteeringValue;
                 valid = moving && turning;

@@ -238,8 +238,39 @@ def hand_owner(wrist, performer_wrists, max_distance=.15):
     return best
 
 
-def gesture_packet(result, performer_wrists):
-    """Top gesture per detected hand, tagged with the performer it belongs to (slot 0 = unassigned)."""
+def hand_sides(hand_wrists, pose_wrists):
+    """'L' or 'R' (the performer's own left/right) for each of one performer's hands, by nearest pose wrist.
+
+    pose_wrists is [left wrist (landmark 15), right wrist (landmark 16)]. Two hands are paired with the two
+    wrists together, so they can never both claim the same side."""
+    if len(pose_wrists) < 2:
+        return ['' for _ in hand_wrists]
+    left, right = pose_wrists[0], pose_wrists[1]
+    if len(hand_wrists) == 2:
+        a, b = hand_wrists
+        straight = math.dist(a, left) + math.dist(b, right)
+        crossed = math.dist(a, right) + math.dist(b, left)
+        return ['L', 'R'] if straight <= crossed else ['R', 'L']
+    return ['L' if math.dist(w, left) <= math.dist(w, right) else 'R' for w in hand_wrists]
+
+
+def hand_offset(wrist, side, shoulders):
+    """Where a hand is relative to its own shoulder, in shoulder widths: (rx, ry).
+
+    shoulders is [left shoulder (landmark 11), right shoulder (landmark 12)]. rx is positive towards the
+    performer's own right (image-left, the preview is unmirrored); ry is positive above the shoulder."""
+    if side not in ('L', 'R') or len(shoulders) < 2:
+        return 0.0, 0.0
+    width = max(abs(shoulders[0][0] - shoulders[1][0]), .02)
+    shoulder = shoulders[0] if side == 'L' else shoulders[1]
+    clamp = lambda v: max(-3.0, min(3.0, v))
+    return clamp((shoulder[0] - wrist[0]) / width), clamp((shoulder[1] - wrist[1]) / width)
+
+
+def gesture_packet(result, performer_wrists, performer_shoulders=None):
+    """Top gesture per detected hand, tagged with the performer it belongs to (slot 0 = unassigned),
+    which of that performer's hands it is (side 'L'/'R', '' when unknown) and, when shoulders are given,
+    where it is relative to its own shoulder (rx, ry)."""
     hands = []
     for categories, landmarks in zip(result.gestures, result.hand_landmarks):
         if not categories or not landmarks:
@@ -247,7 +278,14 @@ def gesture_packet(result, performer_wrists):
         top = categories[0]
         wrist = (landmarks[0].x, landmarks[0].y)
         hands.append(dict(slot=hand_owner(wrist, performer_wrists), gesture=top.category_name,
-                          score=round(float(top.score), 3), x=round(wrist[0], 3), y=round(wrist[1], 3)))
+                          score=round(float(top.score), 3), x=round(wrist[0], 3), y=round(wrist[1], 3),
+                          side='', rx=0.0, ry=0.0))
+    for slot, pose_wrists in performer_wrists.items():
+        mine = [h for h in hands if h['slot'] == slot]
+        for hand, side in zip(mine, hand_sides([(h['x'], h['y']) for h in mine], pose_wrists)):
+            hand['side'] = side
+            rx, ry = hand_offset((hand['x'], hand['y']), side, (performer_shoulders or {}).get(slot, []))
+            hand['rx'], hand['ry'] = round(rx, 3), round(ry, 3)
     return {'version': 1, 'hands': hands}
 
 
@@ -408,7 +446,9 @@ def main():
                     hand_result = recognizer.recognize_for_video(image, timestamp)
                     wrists = {slot: [(observations[i][3][k].x, observations[i][3][k].y) for k in (15, 16)]
                               for slot, i in assignments.items()}
-                    gestures = gesture_packet(hand_result, wrists)
+                    shoulders = {slot: [(observations[i][3][k].x, observations[i][3][k].y) for k in (11, 12)]
+                                 for slot, i in assignments.items()}
+                    gestures = gesture_packet(hand_result, wrists, shoulders)
                     try:
                         sender.sendto(json.dumps(gestures, allow_nan=False).encode(), ('127.0.0.1', args.port + 3))
                     except OSError:

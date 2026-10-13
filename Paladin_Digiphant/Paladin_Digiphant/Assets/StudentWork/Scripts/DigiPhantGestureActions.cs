@@ -13,6 +13,8 @@ namespace DigiPhant
         public string gesture;    // MediaPipe canned gesture: Open_Palm, Victory, Thumb_Up, Thumb_Down, ...
         public float score;
         public float x, y;
+        public string side;       // "L" or "R": the performer's own left/right hand, "" when unknown
+        public float rx, ry;      // offset from that hand's own shoulder, in shoulder widths (+rx = the performer's right, +ry = up)
     }
     [Serializable] public class GestureFrame
     {
@@ -72,6 +74,48 @@ namespace DigiPhant
             return best == null ? "None" : best.gesture;
         }
 
+        // Counts tracker frames, so a scene can require a shape for several frames in a row.
+        public int PacketCount { get; private set; }
+
+        // One of a performer's own hands ("L" or "R"), from fresh, confident, assigned detections: its shape and
+        // where it is relative to its own shoulder, in shoulder widths (+right = the performer's right, +up = above).
+        // False when that hand is not in view. The shape is "None" when the hand is seen but makes no known shape.
+        public bool TryReadHand(int performer, string side, out string shape, out float right, out float up)
+        {
+            shape = "None"; right = up = 0;
+            float now = Time.realtimeSinceStartup;
+            if (now - lastPacket > controller.trackingTimeout || !controller.IsTracked(performer, now)) return false;
+            HandGesture best = null;
+            foreach (var hand in hands)
+            {
+                if (hand == null || hand.slot != performer || hand.side != side || string.IsNullOrEmpty(hand.gesture)
+                    || float.IsNaN(hand.score) || float.IsInfinity(hand.score)
+                    || float.IsNaN(hand.rx) || float.IsInfinity(hand.rx) || float.IsNaN(hand.ry) || float.IsInfinity(hand.ry)) continue;
+                if (best == null || hand.score > best.score) best = hand;
+            }
+            if (best == null) return false;
+            shape = best.score >= minimumScore ? best.gesture : "None"; // a low-confidence shape is no shape
+            right = best.rx; up = best.ry;
+            return true;
+        }
+
+        // For a scene that drives the elephant from hands (Adventure, solo seated): where the trunk points
+        // (-1..1 each; the scene sets them every frame), and the ear-flap and head-shake celebration.
+        [NonSerialized] public float trunkLift, trunkSwing;
+        float trunkLiftNow, trunkSwingNow;
+        BoneControl trunkCurlControl, trunkSwingControl;
+        public void PlayCelebrate() => Celebrate();
+
+        void ApplyFlourishes(float t)
+        {
+            float step = 4 * Time.deltaTime;
+            trunkLiftNow = Mathf.MoveTowards(trunkLiftNow, trunkLift, step);
+            trunkSwingNow = Mathf.MoveTowards(trunkSwingNow, trunkSwing, step);
+            if (t - celebrateStart < celebrateSeconds) ApplyCelebrate(t - celebrateStart);
+            if (trunkLiftNow != 0 && trunkCurlControl != null) Rotate(trunkCurlControl, trunkLiftNow * Mathf.Abs(trunkCurlControl.degrees));
+            if (trunkSwingNow != 0 && trunkSwingControl != null) Rotate(trunkSwingControl, trunkSwingNow * Mathf.Abs(trunkSwingControl.degrees));
+        }
+
         public string CurrentGestureAction { get; private set; } = "None";
         public string SeenGesture { get; private set; } = "None";
         public bool NeutralSet { get; private set; }
@@ -101,6 +145,8 @@ namespace DigiPhant
             leftEar = controller.controls.FirstOrDefault(c => c.label == "Left ear");
             rightEar = controller.controls.FirstOrDefault(c => c.label == "Right ear");
             head = controller.controls.FirstOrDefault(c => c.label == "Head turn");
+            trunkCurlControl = controller.controls.FirstOrDefault(c => c.label == "Trunk curl");
+            trunkSwingControl = controller.controls.FirstOrDefault(c => c.label == "Trunk swing");
         }
 
         void OnDisable() { StopReceiver(); StopCircle(); NeutralSet = armed = false; neutralDeadline = -1; }
@@ -130,6 +176,7 @@ namespace DigiPhant
                 if (frame == null || frame.version != 1) return;
                 hands = frame.hands ?? Array.Empty<HandGesture>();
                 lastPacket = now;
+                PacketCount++;
             }
             catch (Exception e) when (e is SocketException || e is ArgumentException) { }
         }
@@ -159,7 +206,7 @@ namespace DigiPhant
             if (!camera && socket != null) { StopReceiver(); NeutralSet = armed = false; neutralDeadline = -1; }
             Poll(now);
 
-            if (adventureControls) { StopCircle(); return; }
+            if (adventureControls) { StopCircle(); ApplyFlourishes(t); return; }
             SeenGesture = CurrentGesture(now);
             if (SeenGesture == Palm) palmSeen = now;
             if (SeenGesture != held) { held = SeenGesture; heldSince = t; }

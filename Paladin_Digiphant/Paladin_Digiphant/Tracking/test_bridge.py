@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from bridge import (PerformerTracker, ZoneTracker, body_size, extract_features, gesture_packet, hand_owner,
+from bridge import (PerformerTracker, ZoneTracker, body_size, extract_features, gesture_packet, hand_offset, hand_owner, hand_sides,
                     make_tracker, requested_count)
 
 
@@ -187,3 +187,44 @@ class GestureTests(unittest.TestCase):
         packet = gesture_packet(result, {1: [(.3, .5)]})
         self.assertEqual(packet['version'], 1)
         self.assertEqual([(h['slot'], h['gesture']) for h in packet['hands']], [(1, 'Victory'), (0, 'Open_Palm')])
+
+    def test_hands_get_the_performers_own_left_and_right(self):
+        pose = [(.60, .50), (.40, .50)]  # left wrist (15), right wrist (16): unmirrored, so own left is image-right
+        self.assertEqual(hand_sides([(.41, .52)], pose), ['R'])
+        self.assertEqual(hand_sides([(.62, .48)], pose), ['L'])
+        self.assertEqual(hand_sides([(.61, .5), (.39, .5)], pose), ['L', 'R'])
+        # Both hands nearer one wrist still split into one left and one right.
+        self.assertEqual(hand_sides([(.58, .5), (.52, .5)], pose), ['L', 'R'])
+        self.assertEqual(hand_sides([(.5, .5)], [(.5, .5)]), [''])  # one pose wrist: side unknown
+
+    def test_packet_tags_each_hand_with_a_side(self):
+        def point(x, y):
+            return SimpleNamespace(x=x, y=y)
+        result = SimpleNamespace(
+            gestures=[[SimpleNamespace(category_name='Thumb_Up', score=.9)],
+                      [SimpleNamespace(category_name='Closed_Fist', score=.9)],
+                      [SimpleNamespace(category_name='Open_Palm', score=.9)]],
+            hand_landmarks=[[point(.41, .5)], [point(.6, .5)], [point(.95, .05)]])
+        packet = gesture_packet(result, {1: [(.60, .50), (.40, .50)]})
+        self.assertEqual([(h['slot'], h['side'], h['gesture']) for h in packet['hands']],
+                         [(1, 'R', 'Thumb_Up'), (1, 'L', 'Closed_Fist'), (0, '', 'Open_Palm')])
+
+    def test_hand_offset_is_measured_from_its_own_shoulder(self):
+        shoulders = [(.60, .40), (.40, .40)]  # left (11), right (12); shoulder width .2
+        self.assertEqual(hand_offset((.40, .40), 'R', shoulders), (0.0, 0.0))
+        rx, ry = hand_offset((.30, .30), 'R', shoulders)  # further to the performer's right, and higher
+        self.assertAlmostEqual(rx, .5); self.assertAlmostEqual(ry, .5)
+        rx, _ = hand_offset((.50, .40), 'R', shoulders)   # moved in to the body's centre line
+        self.assertAlmostEqual(rx, -.5)
+        rx, _ = hand_offset((.50, .40), 'L', shoulders)   # the left hand at the centre line is to its shoulder's right
+        self.assertAlmostEqual(rx, .5)
+        self.assertEqual(hand_offset((.3, .3), '', shoulders), (0.0, 0.0))
+        self.assertEqual(hand_offset((.3, .3), 'R', []), (0.0, 0.0))
+
+    def test_packet_carries_the_offset_when_shoulders_are_known(self):
+        def point(x, y):
+            return SimpleNamespace(x=x, y=y)
+        result = SimpleNamespace(gestures=[[SimpleNamespace(category_name='Closed_Fist', score=.9)]],
+                                 hand_landmarks=[[point(.30, .40)]])
+        packet = gesture_packet(result, {1: [(.60, .50), (.31, .41)]}, {1: [(.60, .40), (.40, .40)]})
+        self.assertEqual((packet['hands'][0]['side'], packet['hands'][0]['rx'], packet['hands'][0]['ry']), ('R', .5, 0.0))

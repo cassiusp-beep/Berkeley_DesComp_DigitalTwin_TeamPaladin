@@ -179,6 +179,27 @@ namespace DigiPhant
             };
         }
 
+        // Adventure, one seated player: the LEFT hand drives movement, the RIGHT hand does the trunk and actions
+        // (the player's own hands), and shoulder tilt turns.
+        List<Move> ShapeDriveMoves() => new List<Move>
+        {
+            new Move { title = "Stop", sub = "LEFT open palm. Both palms open = neutral", prop = Prop.Palm },
+            new Move { title = "Walk", sub = "LEFT hand: one finger pointing up" },
+            new Move { title = "Run", sub = "LEFT hand: victory, two fingers", prop = Prop.Victory },
+            new Move { title = "Walk backward", sub = "LEFT hand: thumb down", prop = Prop.ThumbDown },
+            new Move { title = "About-turn", sub = "LEFT hand: I-love-you sign", hold = .6f },
+            new Move { title = "Turn", sub = "Tilt your shoulders. Any speed", pose = (t, u) => Lean(OnDesk, u * LeanDeg), hot = Body },
+        };
+        List<Move> ShapeActionMoves() => new List<Move>
+        {
+            new Move { title = "Move the trunk", sub = "It follows your RIGHT hand, any shape" },
+            new Move { title = "Pick up and carry", sub = "RIGHT fist. Keep it closed to carry", prop = Prop.Fist },
+            new Move { title = "Drop", sub = "RIGHT open palm", prop = Prop.Palm },
+            new Move { title = "Jump", sub = "RIGHT thumb up. Jumps forward when moving", prop = Prop.ThumbUp },
+            new Move { title = "Victory toot", sub = "RIGHT victory sign", prop = Prop.Victory, hold = .5f },
+            new Move { title = "Rear up", sub = "RIGHT I-love-you sign, while held" },
+        };
+
         List<Move> HandMoves()
         {
             var adventure = Adventure;
@@ -215,7 +236,7 @@ namespace DigiPhant
             if (Adventure)
                 return new List<Move> {
                     new Move { title = "Jump obstacles", sub = "Clear: +1. Hit: −1. Each obstacle scores once", prop = Prop.Hurdle,
-                        pose = (t, u) => Fig.Lerp(P1Rest, seated ? R(P1Rest, 150, 175) : KneeUp(P1Rest), t), hot = seated ? ArmR : LegR },
+                        pose = Adventure.SoloSeatedShapes ? null : (Func<float, float, Fig>)((t, u) => Fig.Lerp(P1Rest, seated ? R(P1Rest, 150, 175) : KneeUp(P1Rest), t)), hot = seated ? ArmR : LegR },
                     new Move { title = "Deliver parcels", sub = "Pick up in order, then drop in the matching green circle before time runs out: +1", prop = Prop.Deliver },
                     new Move { title = "Stay on the trail", sub = "Off-road drains HP after a short grace period", prop = Prop.Lane },
                     new Move { title = "Finish", sub = "Follow the loop clockwise, then cross the finish arch forwards", prop = Prop.Arch }
@@ -814,6 +835,9 @@ namespace DigiPhant
         // The line above the buttons: what else to know about the page.
         string Note(int kind, bool seated, int people)
         {
+            if (Adventure && Adventure.SoloSeatedShapes && kind != 0)
+                return kind == 5 ? "Jump with a RIGHT thumb up. It works while walking or running. Game pauses while this guide is open."
+                    : "Solo seated: LEFT hand moves, RIGHT hand does the trunk and actions, shoulders turn. Hold both hands at chest height, palms to the camera, apart, fingers clear of your face. Game pauses while this guide is open.";
             if (Adventure)
                 return kind == 0 ? "Close this guide to calibrate or start. Seated mode needs shoulders and both hands visible."
                     : kind == 4 ? "Easy pose + hands uses lean steering. Thumb steering is optional; no Neutral hand step is needed."
@@ -866,13 +890,15 @@ namespace DigiPhant
             // Pages: Setup, P1 .. P3 (as many as there are people), Hands, and Course when the scene has checkpoints.
             // A page's kind is 0 = Setup, 1..3 = that performer, 4 = Hands, 5 = Course.
             var kinds = new List<int> { 0 };
-            for (int r = 1; r <= (Adventure ? 3 : Mathf.Min(people, 3)); r++) kinds.Add(r);
+            bool shapes = Adventure && Adventure.SoloSeatedShapes; // one seated player: every control is a hand shape
+            for (int r = 1; r <= (shapes ? 1 : Adventure ? 3 : Mathf.Min(people, 3)); r++) kinds.Add(r);
             if (!Adventure || Adventure.useHands) kinds.Add(4);
             if (course.Length > 0) kinds.Add(5);
             int pages = kinds.Count;
             page = Mathf.Clamp(page, 0, pages - 1);
             int kind = kinds[page], role = kind;
-            var moves = kind == 0 ? SetupMoves(seated, people) : kind <= 3 ? Moves(role, seated, people) : kind == 4 ? HandMoves() : CourseMoves(seated);
+            var moves = kind == 0 ? SetupMoves(seated, people) : kind <= 3 ? (shapes ? ShapeDriveMoves() : Moves(role, seated, people))
+                : kind == 4 ? (shapes ? ShapeActionMoves() : HandMoves()) : CourseMoves(seated);
 
             GUI.color = new Color(1, 1, 1, .08f);
             GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), DigiPhantUi.White);
