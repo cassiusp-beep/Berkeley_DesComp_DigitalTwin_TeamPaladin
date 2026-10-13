@@ -30,6 +30,12 @@ namespace DigiPhant.Editor
             object Get(object target, string name) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(target);
             void Set(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).SetValue(target, value);
             object Call(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Invoke(target, args);
+            var wallTest = typeof(DigiPhantAdventure).GetMethod("WallEntry", BindingFlags.Static | BindingFlags.NonPublic);
+            float Entry(Vector2 from, Vector2 to) => (float)wallTest.Invoke(null, new object[] { from, to, new Rect(1, -4, 1, 8) });
+            Check(Entry(new Vector2(0, 0), new Vector2(3, 0)) < .34f, "wall sweep must stop even a full crossing in one frame");
+            Check(Entry(new Vector2(0, -5), new Vector2(0, 5)) == 1, "open corridor must remain passable");
+            Check(Entry(new Vector2(.9f, 0), new Vector2(0, 0)) == 1, "backing away must remain possible");
+            Check(Entry(new Vector2(1.1f, 0), new Vector2(.8f, 0)) == 1, "initial overlap must allow escape");
             game.sound = false;
             foreach (DigiPhantAdventure.Difficulty difficulty in Enum.GetValues(typeof(DigiPhantAdventure.Difficulty)))
             {
@@ -105,6 +111,45 @@ namespace DigiPhant.Editor
                 trail.optionalLevel = true; game.BeginGame();
                 Vector3 branch = (Vector3)Call(game, "TrailPoint", layout.branch, layout.branch.length * .5f);
                 Check((float)Call(game, "DistanceToRoad", branch) <= TrunkTrailLayout.CorridorHalf, "bonus branch center must be safe");
+                // Check both sides along the entire branch, not just one center point.
+                for (float d = 0; d <= layout.branch.length; d += 1)
+                {
+                    layout.branch.At(d, out var tangent);
+                    var center = (Vector3)Call(game, "TrailPoint", layout.branch, d);
+                    var side = new Vector3(tangent.y, 0, -tangent.x) * 2.4f;
+                    Check((float)Call(game, "DistanceToRoad", center + side) <= 3.3f &&
+                        (float)Call(game, "DistanceToRoad", center - side) <= 3.3f, "bonus trail edges must not cause HP loss");
+                }
+                game.game = DigiPhantAdventure.Game.RockRun; game.BeginGame();
+                var bonusRocks = (IList)Get(game, "rocks");
+                object bonusRock = bonusRocks[bonusRocks.Count - 1];
+                Check((int)Get(bonusRock, "reward") == 3, "bonus hurdle must award three");
+                var bonusPos = (Vector3)Get(bonusRock, "position");
+                var bonusForward = (Vector3)Get(bonusRock, "forward");
+                Set(game, "previousPosition", (Vector3)Call(game, "World", bonusPos - bonusForward));
+                Set(pose, "jumpStart", Time.time - pose.jumpSeconds / 2);
+                Call(game, "UpdateRocks", bonusPos + bonusForward);
+                Check(game.Score == 3, "bonus jump must score +3");
+                Call(game, "UpdateRocks", bonusPos + bonusForward);
+                Check(game.Score == 3, "bonus jump must only score once");
+                game.BeginGame();
+                bonusRocks = (IList)Get(game, "rocks");
+                bonusRock = bonusRocks[bonusRocks.Count - 1];
+                bonusPos = (Vector3)Get(bonusRock, "position");
+                bonusForward = (Vector3)Get(bonusRock, "forward");
+                Set(game, "previousPosition", (Vector3)Call(game, "World", bonusPos - bonusForward));
+                Call(game, "UpdateRocks", bonusPos + bonusForward);
+                Check(game.Score == 0, "bonus hit must not deduct points");
+                Call(game, "UpdateRocks", bonusPos + bonusForward);
+                Check(game.Score == 0, "resolved bonus hit must remain zero");
+                foreach (var checkpoint in trail.bonusCheckpoints)
+                {
+                    if (!checkpoint || checkpoint.mode != CheckpointMode.Beam) continue;
+                    var bridge = checkpoint.transform.Find("Beam log");
+                    Check(!bridge || !bridge.gameObject.activeSelf, "old bridge must be hidden");
+                    foreach (var surface in checkpoint.GetComponentsInChildren<WalkableSurface>(true))
+                        Check(!surface.enabled, "removed bridge must not retain invisible raised ground");
+                }
                 trail.optionalLevel = false;
             }
             foreach (int people in new[] { 1, 2, 3, 4 })
