@@ -52,6 +52,25 @@ namespace DigiPhant
         [Range(.1f, .65f)] public float circleThrottle = .5f;
 
         public bool showPanel = true;
+        [NonSerialized] public bool adventureControls;
+
+        // Only fresh, confidently assigned hands from the requested performer can drive a game.
+        public string ReadAssignedGesture(int performer, bool steering = false)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - lastPacket > controller.trackingTimeout || !controller.IsTracked(performer, now)) return "None";
+            HandGesture best = null;
+            foreach (var hand in hands)
+            {
+                if (hand == null || hand.slot != performer || hand.score < minimumScore
+                    || float.IsNaN(hand.score) || float.IsInfinity(hand.score)) continue;
+                bool action = steering ? hand.gesture == ThumbUp || hand.gesture == ThumbDown : hand.gesture == "Closed_Fist";
+                if (!action && hand.gesture != Palm) continue;
+                bool bestAction = best != null && best.gesture != Palm;
+                if (best == null || (action && !bestAction) || (action == bestAction && hand.score > best.score)) best = hand;
+            }
+            return best == null ? "None" : best.gesture;
+        }
 
         public string CurrentGestureAction { get; private set; } = "None";
         public string SeenGesture { get; private set; } = "None";
@@ -140,6 +159,7 @@ namespace DigiPhant
             if (!camera && socket != null) { StopReceiver(); NeutralSet = armed = false; neutralDeadline = -1; }
             Poll(now);
 
+            if (adventureControls) { StopCircle(); return; }
             SeenGesture = CurrentGesture(now);
             if (SeenGesture == Palm) palmSeen = now;
             if (SeenGesture != held) { held = SeenGesture; heldSince = t; }

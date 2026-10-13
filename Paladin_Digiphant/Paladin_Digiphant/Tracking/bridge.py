@@ -15,6 +15,28 @@ GESTURE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_rec
 # Google's canned gestures: None, Closed_Fist, Open_Palm, Pointing_Up, Thumb_Down, Thumb_Up, Victory, ILoveYou.
 
 
+def download_model(url, destination):
+    """Verified HTTPS, including Python.org macOS installs without system CA setup."""
+    import shutil
+    import ssl
+    import urllib.request
+    try:
+        import certifi
+        context = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        context = ssl.create_default_context()
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix('.download')
+    try:
+        with urllib.request.urlopen(url, context=context, timeout=60) as source, temporary.open('wb') as output:
+            shutil.copyfileobj(source, output)
+        temporary.replace(destination)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 def extract_features(landmarks, upper_body_only=False):
     """Body-relative image measurements; Unity subtracts the calibrated neutral pose."""
     def xy(i):
@@ -271,29 +293,30 @@ def main():
     parser.add_argument('--port', type=int, default=5055)
     parser.add_argument('--assign', choices=('zones', 'track'), default='zones',
                         help='zones: P1..PN by left-to-right image bands (fixed formation); track: follow movement (starter default)')
-    parser.add_argument('--model', type=Path, default=Path(__file__).parent / 'pose_landmarker_full.task')
+    parser.add_argument('--pose-variant', choices=('lite', 'full', 'heavy'), default='full', help='Pose model to compare; full is the default')
+    parser.add_argument('--model', type=Path, default=None, help='Optional custom pose model path')
     parser.add_argument('--download-model', action='store_true', help='Download the official model if missing')
     parser.add_argument('--gesture-model', type=Path, default=Path(__file__).parent / 'gesture_recognizer.task')
     parser.add_argument('--no-gestures', action='store_true', help='Skip the hand gesture recognizer (sent to --port + 3)')
     args = parser.parse_args()
+    if args.model is None:
+        args.model = Path(__file__).parent / f'pose_landmarker_{args.pose_variant}.task'
+    pose_url = MODEL_URL.replace("pose_landmarker_full", f"pose_landmarker_{args.pose_variant}")
     if not 1024 <= args.port <= 65532:
         parser.error('--port must be between 1024 and 65532')
     if not args.model.exists():
         if not args.download_model:
             parser.error('Model missing. Run again with --download-model (internet required).')
-        import urllib.request
-        args.model.parent.mkdir(parents=True, exist_ok=True)
-        temporary = args.model.with_suffix('.download')
         print('Downloading the official MediaPipe pose model...')
-        urllib.request.urlretrieve(MODEL_URL, temporary)
-        temporary.replace(args.model)
+        download_model(pose_url, args.model)
     if not args.no_gestures and not args.gesture_model.exists():
         if args.download_model:
-            import urllib.request
-            temporary = args.gesture_model.with_suffix('.download')
             print('Downloading the official MediaPipe gesture model...')
-            urllib.request.urlretrieve(GESTURE_MODEL_URL, temporary)
-            temporary.replace(args.gesture_model)
+            try:
+                download_model(GESTURE_MODEL_URL, args.gesture_model)
+            except OSError as error:
+                print(f'Gesture model download failed; pose tracking remains available: {error}')
+                args.no_gestures = True
         else:
             # Gestures are an extra: pose tracking still runs without them.
             print('Gesture model missing; hand gestures off. Run again with --download-model to fetch it.')

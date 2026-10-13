@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DigiPhant.Editor
+namespace DigiPhant
 {
     // Pure geometry for the Trunk Trail, no scene access. Course space: the elephant start is (0,0) and it faces +Z
     // (x = right). The route is a clockwise loop around the start, reached by a short lead-in, with a bonus branch on

@@ -18,6 +18,9 @@ namespace DigiPhant
         public Texture2D PreviewTexture => HasLiveFrame ? texture : null;
         DigiPhantController controller;
         UdpClient receiver;
+        public enum PoseModel { Full, Lite, Heavy }
+        [Tooltip("Stop Play before changing. Download missing models with bridge.py --pose-variant lite/heavy --download-model.")]
+        public PoseModel poseModel = PoseModel.Full;
         Process ownedBridge;
         Texture2D texture;
         float lastFrame = -1000;
@@ -97,14 +100,14 @@ namespace DigiPhant
             string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../Tracking"));
             string executable = Path.Combine(folder, Application.platform == RuntimePlatform.WindowsEditor
                 ? ".venv/Scripts/python.exe" : ".venv/bin/python");
-            if (!File.Exists(executable) || !File.Exists(Path.Combine(folder, "pose_landmarker_full.task")))
+            if (!File.Exists(executable))
             { Status = "Camera setup needed: run setup.sh in the repo folder."; return; }
             try
             {
                 lock (outputLock) bridgeOutput = "";
                 // WorkingDirectory makes all arguments fixed filenames or validated integers.
                 var info = new ProcessStartInfo(executable,
-                    "-u bridge.py --no-window --people " + controller.performerCount +
+                    "-u bridge.py --pose-variant " + poseModel.ToString().ToLowerInvariant() + " --download-model --no-window --people " + controller.performerCount +
                     " --camera " + Mathf.Clamp(cameraIndex, 0, 8) + " --port " + controller.port)
                 {
                     WorkingDirectory = folder, UseShellExecute = false, CreateNoWindow = true,
@@ -155,6 +158,12 @@ namespace DigiPhant
             lastFrame = -1000;
         }
         void OnDisable() => StopPreview();
+        public void DrawImage(Rect picture)
+        {
+            GUI.DrawTexture(picture, Texture2D.blackTexture, ScaleMode.StretchToFill, false);
+            if (HasLiveFrame) GUI.DrawTexture(picture, texture, ScaleMode.ScaleToFit);
+        }
+
         public void DrawInline(float width)
         {
             if (!showPreview) return;

@@ -17,7 +17,7 @@ namespace DigiPhant
     {
         public SignalCombination combination = SignalCombination.Average;
         public MovementSource[] sources = Array.Empty<MovementSource>();
-        [Range(0, 3)] public float sensitivity = 1;
+        [Range(0, 16)] public float sensitivity = 1;
         [Range(0, .5f)] public float deadZone = .12f;
         public bool TryRead(DigiPhantController controller, float now, out float value)
         {
@@ -41,6 +41,9 @@ namespace DigiPhant
     public class DigiPhantLocomotion : MonoBehaviour
     {
         public bool enableLocomotion = true;
+        [NonSerialized] public bool movementSuspended;
+        [NonSerialized] public bool handSteering;
+        [NonSerialized] public float handSteeringValue;
         public Transform travelRoot;
         public Animator elephantAnimator;
         public Transform animationMotionRoot;
@@ -154,6 +157,7 @@ namespace DigiPhant
         }
         public bool Evaluate(float now, float dt)
         {
+            if (movementSuspended) { StopMotion(); return false; }
             if (!enableLocomotion) { StopAnimation(); return false; }
             if (!StartAnimation()) return false;
             dt = Mathf.Clamp(dt, 0, .1f);
@@ -164,7 +168,8 @@ namespace DigiPhant
             {
                 bool moving = forward.TryRead(controller, now, out desiredForward);
                 if (desiredForward < 0) desiredForward *= backwardSensitivity;
-                bool turning = steering.TryRead(controller, now, out desiredTurn);
+                bool turning = handSteering || steering.TryRead(controller, now, out desiredTurn);
+                if (handSteering) desiredTurn = handSteeringValue;
                 valid = moving && turning;
             }
             if (!valid) { throttle = turn = 0; }

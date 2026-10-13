@@ -19,6 +19,12 @@ namespace DigiPhant
         public bool showButton = true;
 
         DigiPhantController controller;
+        DigiPhantAdventure Adventure => GetComponent<DigiPhantAdventure>();
+        public bool IsOpen => open;
+        int closedFrame = -1;
+        public bool ClosedThisFrame => closedFrame == Time.frameCount;
+        public void OpenGuide() { open = true; page = 0; nextScan = 0; }
+        public void CloseGuide() { open = false; closedFrame = Time.frameCount; }
         bool open, seenCamera;
         int page;
         TrunkCheckpoint[] course = new TrunkCheckpoint[0];
@@ -46,7 +52,7 @@ namespace DigiPhant
             lastMode = controller.inputMode;
             var kb = Keyboard.current;
             if (!open || kb == null) return;
-            if (kb.escapeKey.wasPressedThisFrame) open = false;
+            if (kb.escapeKey.wasPressedThisFrame) CloseGuide();
             if (kb.rightArrowKey.wasPressedThisFrame) page++;
             if (kb.leftArrowKey.wasPressedThisFrame) page--;
         }
@@ -76,7 +82,7 @@ namespace DigiPhant
 
         const int ArmL = 1, ArmR = 2, LegR = 8, Body = 16;
         // Extra drawing on a tile: props and hand pictograms. The tile's figure (pose) is optional.
-        enum Prop { None, Panel, Zones, Frame, Preview, Neutral, NeutralHand, Palm, Victory, ThumbUp, ThumbDown, Hurdle, Deliver, Lane, Rolling, Arch, Toggle }
+        enum Prop { None, Panel, Zones, Frame, Preview, Neutral, NeutralHand, Palm, Fist, Victory, ThumbUp, ThumbDown, Hurdle, Deliver, Lane, Rolling, Arch, Toggle }
         class Move
         {
             public Prop prop;
@@ -132,6 +138,18 @@ namespace DigiPhant
                 Add("Ears", "Hands apart flaps the ears", To(L(R(rest, 70, 80), 70, 80)), ArmL | ArmR, 0, 2f, V(.5f, .55f), V(.56f, .55f), V(-.5f, .55f), V(-.56f, .55f));
                 Add("Trunk curl", "Right hand up from your waist", To(R(rest, 60, 170)), ArmR, 0, 3f, V(-.34f, .72f), V(-.34f, .94f));
             }
+            var adventure = Adventure;
+            if (adventure)
+            {
+                if (role == 3 && adventure.useHands)
+                {
+                    list.RemoveAll(m => m.title == "Reach" || m.title == "Pick up or drop" || m.title == "Reach, pick up, drop");
+                    list.Insert(1, new Move { title = "Grab / drop", sub = "Hold a fist 0.35 s near the parcel; open your hand before the next action", prop = Prop.Fist, hold = .35f });
+                }
+                if (adventure.useHands && adventure.thumbSteering && (role == 2 || people == 1))
+                    foreach (var m in list) if (m.title == "Turn") m.sub = "Thumb up: right. Thumb down: left. See Hands";
+                foreach (var m in list) if (m.sub != null) m.sub = m.sub.Replace("near the log", "near the parcel");
+            }
             return list;
         }
 
@@ -149,20 +167,35 @@ namespace DigiPhant
             for (int i = 1; i <= Mathf.Min(people, 4); i++) ids += (i > 1 ? " " : "") + "P" + i;
             return new List<Move>
             {
-                new Move { title = "Pick People and Body", sub = "Left panel: set People and Body, then switch Input to Camera", prop = Prop.Panel, people = people, period = 6f },
+                new Move { title = "Pick People and Body", sub = Adventure ? "Menu: Body + camera, player count, Full body or Seated" : "Left panel: set People and Body, then switch Input to Camera", prop = Prop.Panel, people = people, period = 6f },
                 new Move { title = "Where to stand", prop = Prop.Zones, people = people, period = 4f,
-                    sub = people == 1 ? "In front of the camera, 2.5 to 3 m back" : "One person per red strip, P1 on the left. Same distance, 2.5 to 3 m back" },
+                    sub = people == 1 ? "Center yourself; step back until the required body parts fit" : "One person per strip, P1 on the left; keep everyone visible" },
                 new Move { title = "Stay in frame", prop = Prop.Frame, period = 3f,
                     sub = seated ? "Head, shoulders and both hands in frame" : "The whole body in frame, head to feet" },
                 new Move { title = "Read the preview", prop = Prop.Preview, people = people, period = 10f,
                     sub = "\"Tracking " + ids + "\" is good. A grey skeleton is not assigned yet" },
                 new Move { title = "Neutral pose", prop = Prop.Neutral, people = people, hold = 10f, period = 12f,
-                    sub = "Click Set neutral pose (10 s), hold still until Neutral pose saved" },
+                    sub = Adventure ? "Click CALIBRATE, hold your resting pose for 10 seconds" : "Click Set neutral pose (10 s), hold still until Neutral pose saved" },
             };
         }
 
         List<Move> HandMoves()
         {
+            var adventure = Adventure;
+            if (adventure)
+            {
+                var moves = new List<Move> {
+                    new Move { title = "Grab / drop", sub = "P" + Mathf.Min(3, controller.performerCount) + ": hold fist 0.35 s, close to the parcel, at walking speed or slower", prop = Prop.Fist, hold = .35f },
+                    new Move { title = "Release", sub = "Open your palm for 0.2 s before another grab or drop", prop = Prop.Palm, hold = .2f }
+                };
+                if (adventure.thumbSteering)
+                {
+                    moves.Add(new Move { title = "Turn right", sub = "Navigator holds thumb up; release to go straight", prop = Prop.ThumbUp });
+                    moves.Add(new Move { title = "Turn left", sub = "Navigator holds thumb down; release to go straight", prop = Prop.ThumbDown });
+                }
+                else moves.Add(new Move { title = "Steer", sub = "Navigator leans left/right; return to neutral to go straight", pose = (t, u) => Lean(Rest, u * LeanDeg), hot = Body });
+                return moves;
+            }
             var g = GetComponent<DigiPhantGestureActions>();
             float hold = g ? g.holdSeconds : .35f, countdown = g ? g.neutralCountdownSeconds : 5f, celebrate = g ? g.celebrateSeconds : 2.5f;
             return new List<Move>
@@ -179,6 +212,14 @@ namespace DigiPhant
         // One tile per kind of checkpoint in the scene. The captions reuse each checkpoint's own Hint.
         List<Move> CourseMoves(bool seated)
         {
+            if (Adventure)
+                return new List<Move> {
+                    new Move { title = "Jump obstacles", sub = "Clear: +1. Hit: −1. Each obstacle scores once", prop = Prop.Hurdle,
+                        pose = (t, u) => Fig.Lerp(P1Rest, seated ? R(P1Rest, 150, 175) : KneeUp(P1Rest), t), hot = seated ? ArmR : LegR },
+                    new Move { title = "Deliver parcels", sub = "Pick up in order, then drop in the matching green circle before time runs out: +1", prop = Prop.Deliver },
+                    new Move { title = "Stay on the trail", sub = "Off-road drains HP after a short grace period", prop = Prop.Lane },
+                    new Move { title = "Finish", sub = "Follow the loop clockwise, then cross the finish arch forwards", prop = Prop.Arch }
+                };
             var list = new List<Move>();
             var pa = GetComponent<DigiPhantPoseActions>();
             TrunkCheckpoint Find(params CheckpointMode[] modes)
@@ -392,6 +433,12 @@ namespace DigiPhant
                     float[] len = { .27f, .35f, .37f, .29f };
                     for (int i = 0; i < 4; i++) Seg(H(-.075f + .05f * i, -.04f), H(-.075f + .05f * i + (i - 1.5f) * .035f, -.04f + len[i]), .095f * s, col);
                     Seg(H(-.15f, -.14f), H(-.28f, .04f), .105f * s, col);   // thumb
+                    break;
+                }
+                case Prop.Fist:
+                {
+                    Seg(H(-.08f, -.08f), H(.08f, -.08f), .3f * s, col);
+                    for (int i = 0; i < 3; i++) Seg(H(-.1f, -.15f + i * .07f), H(.12f, -.15f + i * .07f), .018f * s, white);
                     break;
                 }
                 case Prop.Victory:
@@ -614,6 +661,10 @@ namespace DigiPhant
                     }
                     break;
 
+                case Prop.Fist:
+                    if (!front) Hand(Prop.Fist, P(0, .44f), 1.3f * k, DigiPhantUi.Ink);
+                    break;
+
                 case Prop.ThumbUp:
                 case Prop.ThumbDown:
                     if (front) break;
@@ -721,7 +772,7 @@ namespace DigiPhant
         void DrawTile(Rect r, Move m, bool seated, float time)
         {
             if (tileDisc == null) tileDisc = Disc(32);
-            GUI.color = new Color(.95f, .95f, .95f);
+            GUI.color = new Color(.95f, .95f, .95f, .4f);
             new GUIStyle { normal = { background = tileDisc }, border = new RectOffset(16, 16, 16, 16) }.Draw(r, false, false, false, false);
             float cap = DigiPhantUi.Px(50);
             var box = new Rect(r.x, r.y + DigiPhantUi.Px(4), r.width, r.height - cap - DigiPhantUi.Px(6));
@@ -763,6 +814,10 @@ namespace DigiPhant
         // The line above the buttons: what else to know about the page.
         string Note(int kind, bool seated, int people)
         {
+            if (Adventure)
+                return kind == 0 ? "Close this guide to calibrate or start. Seated mode needs shoulders and both hands visible."
+                    : kind == 4 ? "Easy pose + hands uses lean steering. Thumb steering is optional; no Neutral hand step is needed."
+                    : "Solo: all roles. Two players: P1 moves/jumps, P2 steers/grabs. Three or four: P3 grabs. Keyboard: WASD, Space, E. Game pauses while this guide is open.";
             if (kind == 0)
                 return (seated ? "Seated: both hands on the desk, in view. Hands in the lap drop out of frame and the save silently fails. "
                     : "Full body: P1 and P3 rest one hand at the waist, P2 has arms down. ")
@@ -794,7 +849,7 @@ namespace DigiPhant
         void OnGUI()
         {
             if (!controller || Application.isBatchMode) return;
-            GUI.depth = -30; // above the status bar and the guided-recording panel
+            GUI.depth = Adventure ? -80 : -30; // above the status bar and the guided-recording panel
             DigiPhantUi.ScaleOverride = controller.uiScale;
             float Px(float v) => DigiPhantUi.Px(v);
             var previousSkin = GUI.skin;
@@ -811,31 +866,33 @@ namespace DigiPhant
             // Pages: Setup, P1 .. P3 (as many as there are people), Hands, and Course when the scene has checkpoints.
             // A page's kind is 0 = Setup, 1..3 = that performer, 4 = Hands, 5 = Course.
             var kinds = new List<int> { 0 };
-            for (int r = 1; r <= Mathf.Min(people, 3); r++) kinds.Add(r);
-            kinds.Add(4);
+            for (int r = 1; r <= (Adventure ? 3 : Mathf.Min(people, 3)); r++) kinds.Add(r);
+            if (!Adventure || Adventure.useHands) kinds.Add(4);
             if (course.Length > 0) kinds.Add(5);
             int pages = kinds.Count;
             page = Mathf.Clamp(page, 0, pages - 1);
             int kind = kinds[page], role = kind;
             var moves = kind == 0 ? SetupMoves(seated, people) : kind <= 3 ? Moves(role, seated, people) : kind == 4 ? HandMoves() : CourseMoves(seated);
 
-            GUI.color = new Color(1, 1, 1, .72f);
+            GUI.color = new Color(1, 1, 1, .08f);
             GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), DigiPhantUi.White);
             GUI.color = Color.white;
             float w = Mathf.Min(Px(780), Screen.width - Px(24)), h = Mathf.Min(Px(570), Screen.height - Px(24)), pad = Px(18);
             var card = new Rect((Screen.width - w) / 2, (Screen.height - h) / 2, w, h);
+            GUI.color = new Color(1, 1, 1, .58f);
             DigiPhantUi.Panel(card, Px(1.5f));
+            GUI.color = Color.white;
 
             // Header
             float x = card.x + pad, y = card.y + pad;
             GUI.Label(new Rect(x, y, w, Px(14)), "HOW TO MOVE", DigiPhantUi.Text(DigiPhantUi.Heading, DigiPhantUi.Muted, FontStyle.Bold));
-            string title = kind == 0 ? "Setup" : kind <= 3 ? "P" + role + "  ·  " + RoleName[role] : kind == 4 ? "Hand gestures" : "Trunk Trail";
+            string title = kind == 0 ? "Setup" : kind <= 3 ? "P" + (Adventure ? Mathf.Min(role, people) : role) + "  ·  " + RoleName[role] : kind == 4 ? "Hand gestures" : "Trunk Trail";
             GUI.Label(new Rect(x, y + Px(14), w - Px(100), Px(26)), title, DigiPhantUi.Text(DigiPhantUi.Title + 4, DigiPhantUi.Ink, FontStyle.Bold));
             string zone = people == 1 ? "the whole view" : role == 1 ? "the left zone" : role == people ? "the right zone" : "the middle zone";
             string where = kind == 0 ? "Do these first" : kind <= 3 ? "Stand in " + zone : kind == 4 ? "Show a hand to the camera" : "Challenges on the course";
             GUI.Label(new Rect(x, y + Px(41), w - Px(100), Px(16)), where + "  ·  " + (seated ? "Seated" : "Full body") + "  ·  " + people + (people == 1 ? " person" : " people"),
                 DigiPhantUi.Text(DigiPhantUi.Small, DigiPhantUi.Muted));
-            if (GUI.Button(new Rect(card.xMax - pad - Px(72), y, Px(72), Px(DigiPhantUi.ControlHeight)), "Close", DigiPhantUi.Button())) open = false;
+            if (GUI.Button(new Rect(card.xMax - pad - Px(72), y, Px(72), Px(DigiPhantUi.ControlHeight)), "Close", DigiPhantUi.Button())) CloseGuide();
 
             // Footer: note, then Back | Setup P1 P2 P3 Hands Course | Next
             float navH = Px(DigiPhantUi.ControlHeight + 4), noteH = Px(kind >= 4 || kind == 0 ? 42 : 30);
@@ -863,14 +920,14 @@ namespace DigiPhant
             GUI.enabled = true;
             GUILayout.FlexibleSpace();
             var labels = new string[pages];
-            for (int i = 0; i < pages; i++) labels[i] = kinds[i] == 0 ? "Setup" : kinds[i] <= 3 ? "P" + kinds[i] : kinds[i] == 4 ? "Hands" : "Course";
+            for (int i = 0; i < pages; i++) labels[i] = kinds[i] == 0 ? "Setup" : kinds[i] <= 3 ? (Adventure ? new[] { "", "Move", "Steer", "Trunk" }[kinds[i]] : "P" + kinds[i]) : kinds[i] == 4 ? "Hands" : "Course";
             float tab = Mathf.Min(Px(62), (nav.width - 2 * Px(72) - Px(16)) / pages); // narrower tabs in a small window
             GUILayout.BeginHorizontal(GUILayout.Width(tab * pages));
             page = DigiPhantUi.Segmented(null, page, labels);
             GUILayout.EndHorizontal();
             GUILayout.FlexibleSpace();
             if (GUILayout.Button(page < pages - 1 ? "Next" : "Done", DigiPhantUi.Button(DigiPhantUi.Body, true), GUILayout.Width(Px(72))))
-            { if (page < pages - 1) page++; else open = false; }
+            { if (page < pages - 1) page++; else CloseGuide(); }
             GUILayout.EndHorizontal();
             GUILayout.EndArea();
 
