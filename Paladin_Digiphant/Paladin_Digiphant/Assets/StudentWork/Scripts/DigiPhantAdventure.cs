@@ -52,10 +52,67 @@ namespace DigiPhant
         Vector2 menuScroll, hudScroll, instructionScroll;
         bool cameraExpanded;
         float cameraPanelBottom;
-        bool lost;
-        Texture2D lostPicture;
-        // Assets/StudentWork/Resources/OutOfHealthElephant.png, loaded the first time the results screen needs it.
+        bool lost, lostCuePlayed;
+        float lostAt;
+        Texture2D lostPicture, alivePicture, happyPicture;
+        // Assets/StudentWork/Resources: the knocked-out elephant and the same picture with its eyes open,
+        // loaded the first time the results screen needs them.
         Texture2D LostPicture => lostPicture ? lostPicture : lostPicture = Resources.Load<Texture2D>("OutOfHealthElephant");
+        Texture2D AlivePicture => alivePicture ? alivePicture : alivePicture = Resources.Load<Texture2D>("OutOfHealthElephantAlive");
+        Texture2D HappyPicture => happyPicture ? happyPicture : happyPicture = Resources.Load<Texture2D>("TrailCompleteElephantHappy");
+        static readonly Color[] ConfettiColors = { new Color(1, .47f, .1f), new Color(1, .82f, .2f), new Color(.2f, .75f, .4f), new Color(.95f, .35f, .6f), new Color(.3f, .65f, 1f) };
+        // Winning: the elephant jumps for joy, smiling in the air, while confetti bursts up around it. It loops.
+        void DrawWonPicture(Rect slot)
+        {
+            float t = Time.unscaledTime - lostAt;
+            const float hop = .62f;
+            float phase = Mathf.Repeat(t, hop) / hop, air = Mathf.Sin(phase * Mathf.PI); // 0 on the ground, 1 at the top
+            var picture = air > .25f && HappyPicture ? HappyPicture : AlivePicture;
+            if (!picture) return;
+            float aspect = (float)picture.width / Mathf.Max(1, picture.height);
+            // Drawn smaller than the slot, so there is headroom to jump into.
+            float w = Mathf.Min(slot.width, slot.height * aspect) * .76f, h = w / aspect;
+            float stretch = 1 + .07f * air - .1f * Mathf.Clamp01(1 - phase * 7); // stretch in the air, squash on landing
+            float drawW = w * (1 - (stretch - 1) * .6f), drawH = h * stretch, lift = air * h * .28f;
+            GUI.DrawTexture(new Rect(slot.center.x - drawW / 2, slot.yMax - drawH - lift, drawW, drawH), picture, ScaleMode.StretchToFill);
+
+            // Confetti: square "pixels" thrown up from behind the elephant, falling back under gravity.
+            var old = GUI.color;
+            const float burst = 1.5f;
+            for (int i = 0; i < 18; i++)
+            {
+                float a = Mathf.Repeat(i * .618f, 1), b = Mathf.Repeat(i * .414f + .3f, 1);
+                float life = Mathf.Repeat(t / burst + a, 1), age = life * burst;
+                float x = slot.center.x + (a - .5f) * w * .5f + (b - .5f) * 170 * age;
+                float y = slot.yMax - h * .5f - (95 + 60 * a) * age + 130 * age * age;
+                if (y > slot.yMax || y < slot.y - 4 || x < slot.x || x > slot.xMax - 6) continue; // stay off the heading
+                var c = ConfettiColors[i % ConfettiColors.Length]; c.a = Mathf.Clamp01((1 - life) * 3);
+                GUI.color = c;
+                float size = 4 + 2 * b;
+                GUI.DrawTexture(new Rect(x, y, size, size), Texture2D.whiteTexture);
+            }
+            GUI.color = old;
+        }
+        const float LostAliveSeconds = 1.2f; // how long the elephant stands, eyes open, before it keels over
+        // Losing: the elephant bounces on the spot with its eyes open, then its eyes cross, it shudders and slumps.
+        void DrawLostPicture(Rect slot)
+        {
+            float t = Time.unscaledTime - lostAt, down = t - LostAliveSeconds;
+            bool alive = down < 0 && AlivePicture;
+            var picture = alive ? AlivePicture : LostPicture;
+            float aspect = (float)picture.width / Mathf.Max(1, picture.height);
+            float w = Mathf.Min(slot.width, slot.height * aspect), h = w / aspect, dx = 0, lift = 0, slump = 0;
+            if (alive) lift = Mathf.Abs(Mathf.Sin(t * 7)) * h * .06f;
+            else
+            {
+                if (!lostCuePlayed) { lostCuePlayed = true; Play("drop"); }
+                if (down < .35f) dx = Mathf.Sin(down * 75) * w * .03f * (1 - down / .35f);
+                slump = Mathf.SmoothStep(0, 1, (down - .12f) / .4f);
+            }
+            // Slumping squashes the picture a little towards its feet and spreads it slightly.
+            float drawW = w * (1 + .05f * slump), drawH = h * (1 - .12f * slump);
+            GUI.DrawTexture(new Rect(slot.center.x - drawW / 2 + dx, slot.yMax - drawH - lift, drawW, drawH), picture, ScaleMode.StretchToFill);
+        }
         // Solo seated hand shapes: each hand's accepted shape, and what its actions need to remember.
         string rightShape = "None", leftShape = "None", rightPending = "None", leftPending = "None";
         int rightRun, leftRun, lastHandFrame = -1;
@@ -785,11 +842,16 @@ namespace DigiPhant
             State = Phase.Menu; Suspend(true); ClearHandDriving();
             trunk.ResetProp(); previousCarry = false;
         }
+        // Inspector ⋮ menu, during Play: jump straight to the lose screen to check its picture and animation.
+        [ContextMenu("Test: show the lose screen")]
+        void TestLoseScreen() { if (Application.isPlaying) EndGame(false); }
+        [ContextMenu("Test: show the win screen")]
+        void TestWinScreen() { if (Application.isPlaying) EndGame(true); }
         void EndGame(bool won)
         {
             State = Phase.Results; Suspend(true);
             result = won ? "TRAIL COMPLETE!" : "OUT OF HEALTH";
-            lost = !won;
+            lost = !won; lostAt = Time.unscaledTime; lostCuePlayed = false;
             Play(won ? "win" : "hit");
         }
         void Say(string text) { feedback = text; feedbackUntil = Time.unscaledTime + 4; }
@@ -1311,14 +1373,17 @@ namespace DigiPhant
                     menuScroll = GUILayout.BeginScrollView(menuScroll);
                     if (State == Phase.Results)
                     {
-                        if (lost && LostPicture)
+                        if (lost ? LostPicture : AlivePicture)
                         {
-                            // Losing shows the knocked-out elephant beside the heading.
+                            // An animated elephant beside the heading: it keels over on a loss and celebrates on a win.
+                            var heading = new GUIStyle(skin.label) { fontSize = 42, fontStyle = FontStyle.Bold, wordWrap = false, alignment = TextAnchor.MiddleLeft };
+                            // The longer win heading leaves less room, so the picture takes what is left of the row.
+                            float pictureWidth = Mathf.Clamp(556 - heading.CalcSize(new GUIContent(result)).x, 110, 200);
                             GUILayout.BeginHorizontal();
-                            GUILayout.Label(result, new GUIStyle(skin.label) { fontSize = 42, fontStyle = FontStyle.Bold, wordWrap = false, alignment = TextAnchor.MiddleLeft },
-                                GUILayout.ExpandWidth(false), GUILayout.Height(132));
+                            GUILayout.Label(result, heading, GUILayout.ExpandWidth(false), GUILayout.Height(132));
                             GUILayout.FlexibleSpace();
-                            GUI.DrawTexture(GUILayoutUtility.GetRect(200, 132, GUILayout.Width(200), GUILayout.Height(132)), LostPicture, ScaleMode.ScaleToFit);
+                            var slot = GUILayoutUtility.GetRect(pictureWidth, 132, GUILayout.Width(pictureWidth), GUILayout.Height(132));
+                            if (lost) DrawLostPicture(slot); else DrawWonPicture(slot);
                             GUILayout.EndHorizontal();
                         }
                         else Heading(result, 42);
