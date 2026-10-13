@@ -121,6 +121,33 @@ the three parcel tasks. Bonus obstacles do not add Adventure points.
 Keep the elephant's scene starting position/heading aligned with the builder's original start. A manually
 rerouted map (rather than the current generated Trunk Trail) needs its route geometry updated too.
 
+## Solo seated hand controls
+
+With **Solo**, **Seated / close-up** and **Easy pose + hands**, one player drives everything with hand shapes.
+The LEFT hand is movement and the RIGHT hand is the trunk and actions (the player's own left and right), so the
+two combine freely. Rest with both palms open at chest height, facing the camera, apart, fingers clear of the face.
+
+| Left hand | Elephant | | Right hand | Elephant |
+| --- | --- | --- | --- | --- |
+| Open palm | Stop | | Open palm | Trunk free; drops what it carries |
+| One finger up | Walk | | Closed fist | Pick up, and keep carrying |
+| Victory (two fingers) | Run | | Thumb up | Jump (forward when moving) |
+| Thumb down | Walk backward | | Victory, held 0.5 s | Victory toot |
+| I-love-you, held 0.6 s | About-turn | | I-love-you, held | Rear up while held |
+
+- **Turn:** tilt your shoulders, at any speed. **Trunk:** it follows where the right hand is, whatever its shape.
+- A shape counts after 4 confident tracker frames in a row (score 0.6 or higher). Jump, toot and about-turn fire
+  once per sign; jump also has a 1 s cooldown.
+- If the left hand shows no shape for 0.3 s the elephant stops. Only a right open palm drops, so a lost right
+  hand keeps carrying. Rear up and about-turn pause travel; jump and toot do not.
+- Body signals do not move the elephant in this mode. The toolbar shows what each hand reads, e.g. `L: point up · R: fist`.
+- Tune on **Digi Phant Adventure**: **Seated Lean Dead Zone**, **Seated Lean Full**, and **Trunk Swing Sign**
+  (set to 1 if the trunk swings the opposite way to the hand).
+- The tracker now tags every hand with its owner's side (`side`: L/R, by nearest pose wrist, not the recognizer's
+  mirrored label) and its offset from its own shoulder (`rx`, `ry`, in shoulder widths) on the gesture port.
+
+Every other mode (standing, 2 to 4 players, Pose only, keyboard) is unchanged.
+
 ## Pose tools in Adventure
 
 In **Body + camera** mode the menu has three tuning buttons, shared with the student scene's status bar:

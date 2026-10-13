@@ -56,6 +56,8 @@ namespace DigiPhant
         // For scenes that hide the status bar and offer these tools from their own menu (Adventure).
         [System.NonSerialized] public int trunkPerformerOverride; // 0 = the performer who is neither driver nor navigator
         [System.NonSerialized] public Vector2 numbersCorner = new Vector2(12, 12); // screen pixels, used when the bar is hidden
+        // Solo seated hand shapes: jump, rear and about-turn come from the scene, not from body signals.
+        [System.NonSerialized] public bool posesFromGestures, gestureRear;
         public bool GuideActive => guide != GuideStage.Off;
         public bool Logging => log != null;
         public void BeginGuidedRecording() => StartGuide(Time.realtimeSinceStartup);
@@ -106,7 +108,8 @@ namespace DigiPhant
             float now = Time.realtimeSinceStartup, t = Time.time;
             bool live = !movementSuspended && controller.inputMode == InputMode.Camera && controller.IsCalibrated;
 
-            if (live) DetectPoses(now, t);
+            if (live && posesFromGestures) { rearing = gestureRear; tPoseSince = rearSince = -1; }
+            else if (live) DetectPoses(now, t);
             else { tPoseSince = rearSince = -1; rearing = false; }
 
             bool jumping = t - jumpStart < jumpSeconds, turning = t - turnStart < turnSeconds;
@@ -156,6 +159,15 @@ namespace DigiPhant
                 { turnStart = lastTurn = t; turnFrom = locomotion && locomotion.travelRoot ? locomotion.travelRoot.eulerAngles.y : 0; tPoseSince = -1; }
             }
             else tPoseSince = -1;
+        }
+
+        // The same about-turn the navigator's T-pose starts, for scenes that trigger it another way.
+        public void TestAboutTurn()
+        {
+            float t = Time.time;
+            if (movementSuspended || rearing || t - lastTurn <= turnCooldown || t - turnStart <= turnSeconds) return;
+            turnStart = lastTurn = t;
+            turnFrom = locomotion && locomotion.travelRoot ? locomotion.travelRoot.eulerAngles.y : 0;
         }
 
         // Inspector ⋮ menu / on-screen test button: the same jump the driver's knee lift starts, without the camera.

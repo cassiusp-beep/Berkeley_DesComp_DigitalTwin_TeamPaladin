@@ -44,6 +44,7 @@ namespace DigiPhant
     public class DigiPhantController : MonoBehaviour
     {
         public InputMode inputMode = InputMode.TestSliders;
+        [NonSerialized] public bool muteBodySignals; // hand-shape driving: raised hands must not lift legs or flap ears
         [HideInInspector] public int performerCount = 3;
         public bool upperBodyOnly;
         public BoneControl[] controls = Array.Empty<BoneControl>();
@@ -308,6 +309,7 @@ namespace DigiPhant
                 if (i >= 0 && i < performerCount && k >= 0 && k < 6)
                 {
                     if (inputMode == InputMode.TestSliders) target = c.testValue;
+                    else if (muteBodySignals) target = 0;
                     else if (IsCalibrated && IsTracked(c.performer, now) && confidence[i, k] >= minimumConfidence)
                         target = values[i, k] - neutral[i, k];
                 }
