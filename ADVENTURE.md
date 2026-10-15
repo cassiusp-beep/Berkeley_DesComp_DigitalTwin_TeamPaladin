@@ -121,6 +121,22 @@ the three parcel tasks. Bonus obstacles do not add Adventure points.
 Keep the elephant's scene starting position/heading aligned with the builder's original start. A manually
 rerouted map (rather than the current generated Trunk Trail) needs its route geometry updated too.
 
+## Three or more players: P3 picks up and drops by raising a hand
+
+With 3 or 4 players, in any camera mode, P3 (the trunk performer) grabs with hand raises instead of a fist or a squat:
+
+- Raise the **right** hand above the shoulder and hold about 0.4 s: **pick up**.
+- Raise the **left** hand above the shoulder and hold about 0.4 s: **drop**.
+
+Each raise acts once and only while the other hand stays down; lower the hand to use it again. Calibrate with P3's
+right hand at the waist and left arm down, since "raised" is measured from that pose. The usual grab limits still
+apply (trunk tip within reach of the current parcel, walking speed or slower). The play toolbar's second line shows
+the grab status, e.g. "parcel 3.4 away". Tune **Raise To Grab Above** (1.0), **Raise To Grab Rearm** (0.5) and
+**Raise To Grab Hold** (0.4 s) on Digi Phant Adventure. One and two players keep the fist or squat.
+
+Full-body steering is softer in the Adventure, Student and Trunk Trail scenes: steering sensitivity 12.5 → 9 and
+dead zone 0.44 → 0.36, so turning still starts at a lean of about 0.035 but reaches full speed at 0.11 instead of 0.08.
+
 ## Solo seated hand controls
 
 With **Solo**, **Seated / close-up** and **Easy pose + hands**, one player drives everything with hand shapes.

@@ -120,6 +120,17 @@ namespace DigiPhant
         bool jumpFired, tootFired, aboutTurnFired, grabComplained;
         [Tooltip("Solo seated hand shapes: shoulder tilt below this does not steer.")]
         public float seatedLeanDeadZone = .06f;
+        [Header("Three or more players: P3 picks up and drops with hand raises")]
+        [Tooltip("Hand height, measured from P3's calibrated resting pose, that counts as raised (about shoulder height).")]
+        public float raiseToGrabAbove = 1f;
+        [Tooltip("The hand must come back below this before the same raise can act again.")]
+        public float raiseToGrabRearm = .5f;
+        [Tooltip("Seconds a raise must be held before it picks up or drops.")]
+        public float raiseToGrabHold = .4f;
+        float rightRaiseSince = -1, leftRaiseSince = -1;
+        bool rightRaiseArmed = true, leftRaiseArmed = true;
+        // With three or more players, P3 grabs by raising a hand: right picks up, left drops. It replaces the fist and the squat.
+        public bool RaiseToGrab => controller && controller.inputMode == InputMode.Camera && controller.performerCount >= 3;
         [Tooltip("Solo seated hand shapes: shoulder tilt that gives full turn speed.")]
         public float seatedLeanFull = .2f;
         [Tooltip("Solo seated hand shapes: set to 1 if the trunk swings the opposite way to your right hand.")]
@@ -820,7 +831,7 @@ namespace DigiPhant
             locomotion.movementSuspended = value;
             pose.movementSuspended = value;
             if (value) { locomotion.StopMotion(); pose.ResetGameMotion(); }
-            trunk.handGesturesOnly = value || useHands;
+            trunk.handGesturesOnly = value || useHands || RaiseToGrab; // the squat only grabs when hand raises don't
         }
         public void BeginGame()
         {
@@ -841,6 +852,7 @@ namespace DigiPhant
         {
             State = Phase.Menu; Suspend(true); ClearHandDriving();
             trunk.ResetProp(); previousCarry = false;
+            rightRaiseSince = leftRaiseSince = -1; rightRaiseArmed = leftRaiseArmed = true;
         }
         // Inspector ⋮ menu, during Play: jump straight to the lose screen to check its picture and animation.
         [ContextMenu("Test: show the lose screen")]
@@ -889,6 +901,7 @@ namespace DigiPhant
             Suspend(false);
             if (useHands && controller.inputMode == InputMode.Camera) ReadHands();
             else { ClearHandDriving(); grabArmed = false; }
+            if (RaiseToGrab) ReadRaiseToGrab(Time.time);
             var keyboard = Keyboard.current;
             if (keyboard != null && controller.inputMode == InputMode.TestSliders)
             {
@@ -900,6 +913,16 @@ namespace DigiPhant
                 if (keyboard.eKey.wasPressedThisFrame) ToggleGrab();
             }
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToMenu();
+        }
+        // Why a grab would or wouldn't work right now, for the play toolbar and the "can't grab" message.
+        string GrabStatus()
+        {
+            if (trunk.Carrying) return "carrying";
+            if (!trunk.carryProp) return game == Game.RockRun ? "no parcels in Rock run" : "no parcel left";
+            if (!trunk.trunkTip) return "trunk tip not set";
+            if (Mathf.Abs(locomotion.CurrentSpeed) > trunk.maxGrabSpeed) return "too fast";
+            Vector3 d = trunk.carryProp.position - trunk.trunkTip.position; d.y = 0;
+            return d.magnitude <= trunk.pickupRadius ? "parcel in reach" : "parcel " + d.magnitude.ToString("0.0") + " away";
         }
         // What the game currently reads from a hand, for the play toolbar ("none" = hidden or not a known shape).
         static string ShapeName(string shape) => shape == "Open_Palm" ? "palm" : shape == "Closed_Fist" ? "fist"
@@ -963,7 +986,7 @@ namespace DigiPhant
             // Closed fist: pick up, and keep carrying. It keeps trying while the fist is held, so it grabs on arrival.
             if (r != Fist) grabComplained = false;
             else if (!trunk.Carrying && !trunk.TryToggleGrab() && !grabComplained)
-            { grabComplained = true; Say("Lower the trunk near the parcel and slow down."); }
+            { grabComplained = true; Say(game == Game.RockRun ? "Rock run has no parcels. Choose Delivery or Expedition to pick things up." : "Can't grab: " + GrabStatus() + "."); }
             // Open palm: drop. Only an open palm drops, so a lost hand or another shape keeps carrying.
             if (r == Palm && trunk.Carrying) trunk.TryToggleGrab();
             // Thumb up: jump, once per thumb, at most once a second. Jumps forward when moving.
@@ -1007,7 +1030,7 @@ namespace DigiPhant
                 string steering = gestures.ReadAssignedGesture(Mathf.Min(2, controller.performerCount), true);
                 locomotion.handSteeringValue = steering == "Thumb_Up" ? .8f : steering == "Thumb_Down" ? -.8f : 0;
             }
-            ProcessGrabGesture(gestures.ReadAssignedGesture(Mathf.Min(3, controller.performerCount)), Time.unscaledTime);
+            if (!RaiseToGrab) ProcessGrabGesture(gestures.ReadAssignedGesture(Mathf.Min(3, controller.performerCount)), Time.unscaledTime);
         }
         void ProcessGrabGesture(string grab, float now)
         {
@@ -1018,9 +1041,35 @@ namespace DigiPhant
             grabArmed = false;
             ToggleGrab();
         }
+        // P3 raises the right hand to pick up and the left hand to drop. Each raise acts once, after a short hold, and
+        // only while the other hand stays down; lower the hand to use it again.
+        void ReadRaiseToGrab(float t)
+        {
+            float now = Time.realtimeSinceStartup;
+            int p = trunk.trunkPerformer;
+            bool rightSeen = controller.TryReadMovement(p, Movement.RightHandHeight, now, out float right);
+            bool leftSeen = controller.TryReadMovement(p, Movement.LeftHandHeight, now, out float left);
+            bool rightUp = rightSeen && right > raiseToGrabAbove, leftUp = leftSeen && left > raiseToGrabAbove;
+            if (!rightSeen || right < raiseToGrabRearm) rightRaiseArmed = true;
+            if (!leftSeen || left < raiseToGrabRearm) leftRaiseArmed = true;
+
+            if (rightUp && !leftUp && rightRaiseArmed)
+            {
+                if (rightRaiseSince < 0) rightRaiseSince = t;
+                if (t - rightRaiseSince >= raiseToGrabHold) { rightRaiseArmed = false; if (!trunk.Carrying) ToggleGrab(); }
+            }
+            else rightRaiseSince = -1;
+
+            if (leftUp && !rightUp && leftRaiseArmed)
+            {
+                if (leftRaiseSince < 0) leftRaiseSince = t;
+                if (t - leftRaiseSince >= raiseToGrabHold) { leftRaiseArmed = false; if (trunk.Carrying) ToggleGrab(); }
+            }
+            else leftRaiseSince = -1;
+        }
         void ToggleGrab()
         {
-            if (!trunk.TryToggleGrab()) Say("Move the trunk closer to the parcel and slow down.");
+            if (!trunk.TryToggleGrab()) Say(game == Game.RockRun ? "Rock run has no parcels. Choose Delivery or Expedition to pick things up." : "Can't grab: " + GrabStatus() + ".");
         }
         void UpdateCamera(bool snap = false)
         {
@@ -1491,7 +1540,8 @@ namespace DigiPhant
                 else if (useHands)
                 {
                     thumbSteering = Choices(thumbSteering ? 1 : 0, new[] { "Lean to steer", "Thumb steering" }) == 1;
-                    GUILayout.Label("Hold a fist briefly to grab/drop. Open your hand before the next action.");
+                    GUILayout.Label(people >= 3 ? "P3: raise your right hand above your shoulder to pick up, your left hand to drop."
+                        : "Hold a fist briefly to grab/drop. Open your hand before the next action.");
                 }
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button(controller.CalibrationPending ? "Cancel calibration" : "CALIBRATE · 10 seconds"))
@@ -1627,9 +1677,11 @@ namespace DigiPhant
             if (GUI.Button(new Rect(1008, 701, 164, 34), "Menu / restart")) ReturnToMenu();
             bool bodyMode = controller.inputMode == InputMode.Camera;
             if (bodyMode && GUI.Button(new Rect(533, 701, 150, 34), pose.showNumbers ? "Hide numbers" : "Show numbers")) pose.showNumbers = !pose.showNumbers;
-            GUI.Label(bodyMode ? new Rect(693, 704, 305, 30) : new Rect(538, 704, 460, 30), bodyMode
-                ? (SoloSeatedShapes ? "L: " + ShapeName(leftShape) + " · R: " + ShapeName(rightShape) : useHands ? (thumbSteering ? "Thumbs: steer · Fist: grab/drop" : "Lean: steer · Fist: grab/drop") : "Lean: steer · Squat: grab/drop")
-                : "WASD · Space: jump · E: grab/drop");
+            // Camera play shows two short lines (controls or hand readout, then grab status), in a smaller font.
+            bool twoLines = bodyMode;
+            GUI.Label(twoLines ? new Rect(693, 696, 310, 44) : bodyMode ? new Rect(693, 704, 305, 30) : new Rect(538, 704, 460, 30), bodyMode
+                ? ((SoloSeatedShapes ? "L: " + ShapeName(leftShape) + " · R: " + ShapeName(rightShape) : RaiseToGrab ? "P3 right hand up: pick up · left hand up: drop" : useHands ? (thumbSteering ? "Thumbs: steer · Fist: grab/drop" : "Lean: steer · Fist: grab/drop") : "Lean: steer · Squat: grab/drop") + "\n" + GrabStatus())
+                : "WASD · Space: jump · E: grab/drop", twoLines ? new GUIStyle(skin.label) { fontSize = 14 } : skin.label);
         }
         void OpenMovementGuide()
         {
