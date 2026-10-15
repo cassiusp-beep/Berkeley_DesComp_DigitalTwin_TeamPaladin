@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace DigiPhant
 {
@@ -133,6 +134,13 @@ namespace DigiPhant
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AddToScene()
+        {
+            // Runs once per launch; sceneLoaded also covers scenes opened later by the Mac app's scene button.
+            SceneManager.sceneLoaded -= Attach;
+            SceneManager.sceneLoaded += Attach;
+            Attach(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+        static void Attach(Scene scene, LoadSceneMode mode)
         {
             var c = FindAnyObjectByType<DigiPhantController>();
             if (c && !c.GetComponent<DigiPhantGestureActions>()) c.gameObject.AddComponent<DigiPhantGestureActions>();

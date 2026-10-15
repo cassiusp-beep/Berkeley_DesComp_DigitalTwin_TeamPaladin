@@ -151,7 +151,14 @@ namespace DigiPhant
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Bootstrap()
         {
-            if (SceneManager.GetActiveScene().name != "DigiPhant_Adventure" && SceneManager.GetActiveScene().name != "DigiPhant_TrunkTrail") return;
+            // Runs once per launch; sceneLoaded also covers scenes opened later by the Mac app's scene button.
+            SceneManager.sceneLoaded -= Attach;
+            SceneManager.sceneLoaded += Attach;
+            Attach(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+        static void Attach(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name != "DigiPhant_Adventure" && scene.name != "DigiPhant_TrunkTrail") return;
             var c = FindAnyObjectByType<DigiPhantController>();
             if (c && !c.GetComponent<DigiPhantAdventure>()) c.gameObject.AddComponent<DigiPhantAdventure>();
         }
@@ -1517,6 +1524,11 @@ namespace DigiPhant
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Movement guide")) OpenMovementGuide();
             if (GUILayout.Button(sound ? "Sound: on" : "Sound: off")) sound = !sound;
+            // The Mac app ships both scenes; the swap is skipped if the other scene is not in the build.
+            string other = SceneManager.GetActiveScene().name == "DigiPhant_TrunkTrail" ? "DigiPhant_Adventure" : "DigiPhant_TrunkTrail";
+            if (Application.CanStreamedLevelBeLoaded(other)
+                && GUILayout.Button(other == "DigiPhant_TrunkTrail" ? "Go to Trunk Trail" : "Go to Adventure"))
+                SceneManager.LoadScene(other);
             GUILayout.EndHorizontal();
             if (controller.inputMode == InputMode.Camera)
             {
