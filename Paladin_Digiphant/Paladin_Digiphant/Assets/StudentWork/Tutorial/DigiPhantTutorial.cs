@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace DigiPhant
 {
@@ -35,6 +36,13 @@ namespace DigiPhant
         static void Bootstrap()
         {
             if (Application.isBatchMode) return;
+            // Runs once per launch; sceneLoaded also covers scenes opened later by the Mac app's scene button.
+            SceneManager.sceneLoaded -= Attach;
+            SceneManager.sceneLoaded += Attach;
+            Attach(SceneManager.GetActiveScene(), LoadSceneMode.Single);
+        }
+        static void Attach(Scene scene, LoadSceneMode mode)
+        {
             var c = FindAnyObjectByType<DigiPhantController>();
             if (c && !c.GetComponent<DigiPhantTutorial>()) c.gameObject.AddComponent<DigiPhantTutorial>();
         }

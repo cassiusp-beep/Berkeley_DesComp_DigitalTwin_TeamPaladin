@@ -40,6 +40,7 @@ EXPLORE → EXPLAIN → ASK PERMISSION → BUILD → HEAL → REVIEW → (loop i
 - **Pass context forward.** Each agent starts fresh. Give it the task, the relevant files, and the previous agent's findings. Never assume it knows what happened earlier.
 - **One role per agent.** Do not ask one agent to do another agent's job because it is faster.
 - **Surface disagreement.** If two agents contradict each other, show the human both views rather than silently picking one.
+- **Mac app bug checklist.** Before any Mac app build, and in every heal and review of changes to `Assets/StudentWork`, `Tracking/` or the build scripts, run the bug checklist in `MAC_APP.md`. Add any new built-app bug you find to that checklist.
 
 ## Anti-Entrenchment Principle
 

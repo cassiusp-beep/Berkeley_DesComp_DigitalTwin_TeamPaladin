@@ -228,3 +228,17 @@ class GestureTests(unittest.TestCase):
                                  hand_landmarks=[[point(.30, .40)]])
         packet = gesture_packet(result, {1: [(.60, .50), (.31, .41)]}, {1: [(.60, .40), (.40, .40)]})
         self.assertEqual((packet['hands'][0]['side'], packet['hands'][0]['rx'], packet['hands'][0]['ry']), ('R', .5, 0.0))
+
+
+class CenterStageTests(unittest.TestCase):
+    def test_does_nothing_off_macos(self):
+        import sys
+        from unittest import mock
+        import bridge
+        with mock.patch.object(sys, 'platform', 'linux'):
+            self.assertFalse(bridge.disable_center_stage())
+
+    def test_is_safe_to_call_without_a_camera(self):
+        # Sets a process-wide AVFoundation flag only; it must never raise or open the camera.
+        import bridge
+        self.assertIsInstance(bridge.disable_center_stage(), bool)

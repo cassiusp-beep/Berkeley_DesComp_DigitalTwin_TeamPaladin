@@ -28,7 +28,10 @@ namespace StudentWork
             nextLog = now + .1f;
             if (log == null)
             {
-                string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../Logs/digiphant_signals.csv"));
+                // The Mac app cannot write inside its own bundle, so it logs to its data folder.
+                string folder = Application.isEditor ? System.IO.Path.Combine(Application.dataPath, "../Logs") : System.IO.Path.Combine(Application.persistentDataPath, "Logs");
+                System.IO.Directory.CreateDirectory(folder);
+                string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(folder, "digiphant_signals.csv"));
                 bool header = !System.IO.File.Exists(path);
                 log = new System.IO.StreamWriter(path, true) { AutoFlush = true };
                 if (header) log.WriteLine("time,calibrated,performer,tracked,Lhand,Rhand,Lfoot,Rfoot,Lean,Spread,hidden,action,speed");

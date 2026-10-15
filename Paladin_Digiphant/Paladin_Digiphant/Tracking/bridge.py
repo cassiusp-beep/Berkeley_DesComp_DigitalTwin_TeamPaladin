@@ -322,6 +322,33 @@ def encode_preview(frame, cv2):
     return None
 
 
+def disable_center_stage():
+    """macOS: keep the raw camera view. Center Stage zooms and pans, which moves performers between zones.
+    A background tracker has no Control Center toggle, so the app takes control of the setting itself."""
+    import sys
+    if sys.platform != 'darwin':
+        return False
+    import ctypes
+    try:
+        ctypes.cdll.LoadLibrary('/System/Library/Frameworks/AVFoundation.framework/AVFoundation')
+        objc = ctypes.cdll.LoadLibrary('/usr/lib/libobjc.A.dylib')
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = [ctypes.c_char_p]
+        device = objc.objc_getClass(b'AVCaptureDevice')
+        if not device:
+            return False
+        send = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long)(('objc_msgSend', objc))
+        send_bool = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool)(('objc_msgSend', objc))
+        read = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)(('objc_msgSend', objc))
+        send(device, objc.sel_registerName(b'setCenterStageControlMode:'), 1)  # AVCaptureCenterStageControlModeApp
+        send_bool(device, objc.sel_registerName(b'setCenterStageEnabled:'), False)
+        return not read(device, objc.sel_registerName(b'isCenterStageEnabled'))
+    except (OSError, AttributeError):
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--people', type=int, choices=(1, 2, 3, 4), default=3)
@@ -375,6 +402,7 @@ def main():
         running_mode=vision.RunningMode.VIDEO, num_hands=8,
         min_hand_detection_confidence=.5, min_hand_presence_confidence=.5, min_tracking_confidence=.5)
     tracker = make_tracker(args.people, args.assign)
+    print('Center Stage off' if disable_center_stage() else 'Center Stage unchanged', flush=True)
     camera = cv2.VideoCapture(args.camera)
     if not camera.isOpened():
         raise SystemExit('Camera could not open. Check permissions or try --camera 1.')

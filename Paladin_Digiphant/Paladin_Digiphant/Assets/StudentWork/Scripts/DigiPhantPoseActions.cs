@@ -227,7 +227,8 @@ namespace DigiPhant
         // CSV of every calibrated signal, for choosing thresholds and for the project's generated dataset.
         void StartLog(string label = null)
         {
-            string dir = Path.Combine(Application.dataPath, "..", "Recordings");
+            // The Mac app cannot write inside its own bundle, so it keeps recordings in its data folder.
+            string dir = Path.Combine(Application.isEditor ? Path.Combine(Application.dataPath, "..") : Application.persistentDataPath, "Recordings");
             Directory.CreateDirectory(dir);
             string name = "signals_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + (label != null ? "_" + label : "");
             string path = Path.Combine(dir, name + ".csv");
