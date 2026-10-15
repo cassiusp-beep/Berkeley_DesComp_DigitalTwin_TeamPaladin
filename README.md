@@ -14,10 +14,13 @@ Submitted by Cassius Palacio.
 
 ## Video and documents
 
-- **Performance video:** https://drive.google.com/file/d/1TrNWXggplJr-OyJgmXpXyit9uF-RPYte/view?usp=drive_link
-- **Document:** https://docs.google.com/document/d/1n1lZRmmEF36ZWz0F07mDsH6fsxLEN6R77hFWLruTdjw/edit?usp=drive_link
+The Google Drive links open only when you're signed in with a UC Berkeley account.
+
+- **Performance video:** https://drive.google.com/file/d/1TrNWXggplJr-OyJgmXpXyit9uF-RPYte/view?usp=sharing
+- **Performance video, high resolution:** https://drive.google.com/file/d/1sYhgc_78Sas4dPh-BQMm2b44Pmb0ycBZ/view?usp=drive_link
+- **Document:** https://docs.google.com/document/d/1n1lZRmmEF36ZWz0F07mDsH6fsxLEN6R77hFWLruTdjw/edit?usp=sharing
 - **Document (PDF):** https://drive.google.com/file/d/17g9MqpmuC2pqtiyNT0w5HgxP5-jawK4H/view?usp=drive_link
-- **Project folder (Google Drive):** https://drive.google.com/drive/folders/1JzrJrxqDRkcv55oK-OOCVzuLTQ3k0nCz?usp=drive_link
+- **Project folder:** https://drive.google.com/drive/folders/1JzrJrxqDRkcv55oK-OOCVzuLTQ3k0nCz?usp=drive_link
 - **Setup guide:** [DIGIPHANT_SETUP.md](DIGIPHANT_SETUP.md)
 
 ## The performance scene
