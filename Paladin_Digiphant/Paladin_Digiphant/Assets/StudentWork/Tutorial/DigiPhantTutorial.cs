@@ -149,7 +149,14 @@ namespace DigiPhant
             var adventure = Adventure;
             if (adventure)
             {
-                if (role == 3 && adventure.useHands)
+                if (role == 3 && people >= 3)
+                {
+                    // Three or more players: P3 picks up and drops by raising a hand (no fist, no squat).
+                    list.RemoveAll(m => m.title == "Reach" || m.title == "Pick up or drop" || m.title == "Reach, pick up, drop");
+                    list.Insert(1, new Move { title = "Pick up", sub = "Raise your right hand above your shoulder, near the parcel", pose = To(R(rest, 150, 175)), hot = ArmR, hold = .4f });
+                    list.Insert(2, new Move { title = "Drop", sub = "Raise your left hand above your shoulder", pose = To(L(rest, 150, 175)), hot = ArmL, hold = .4f });
+                }
+                else if (role == 3 && adventure.useHands)
                 {
                     list.RemoveAll(m => m.title == "Reach" || m.title == "Pick up or drop" || m.title == "Reach, pick up, drop");
                     list.Insert(1, new Move { title = "Grab / drop", sub = "Hold a fist 0.35 s near the parcel; open your hand before the next action", prop = Prop.Fist, hold = .35f });
@@ -214,7 +221,9 @@ namespace DigiPhant
             if (adventure)
             {
                 var moves = new List<Move> {
-                    new Move { title = "Grab / drop", sub = "P" + Mathf.Min(3, controller.performerCount) + ": hold fist 0.35 s, close to the parcel, at walking speed or slower", prop = Prop.Fist, hold = .35f },
+                    controller.performerCount >= 3
+                        ? new Move { title = "Pick up / drop", sub = "P3: raise the right hand to pick up, the left hand to drop", pose = (t, u) => Fig.Lerp(P3Rest, R(P3Rest, 150, 175), t), hot = ArmR, hold = .4f }
+                        : new Move { title = "Grab / drop", sub = "P" + Mathf.Min(3, controller.performerCount) + ": hold fist 0.35 s, close to the parcel, at walking speed or slower", prop = Prop.Fist, hold = .35f },
                     new Move { title = "Release", sub = "Open your palm for 0.2 s before another grab or drop", prop = Prop.Palm, hold = .2f }
                 };
                 if (adventure.thumbSteering)
